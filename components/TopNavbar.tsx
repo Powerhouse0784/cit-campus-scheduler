@@ -47,6 +47,26 @@ export default function TopNavbar({
     }
   };
 
+  const handleRoleChange = async (newRole: string) => {
+    setRole(newRole);
+    try {
+      await fetch("/api/cit/auth/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: newRole }),
+      });
+    } catch {}
+  };
+
+  useEffect(() => {
+    // Synchronize initial session with server
+    fetch("/api/cit/auth/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role }),
+    }).catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (!menuOpen) return;
     const onDown = (e: MouseEvent) => {
@@ -155,7 +175,7 @@ export default function TopNavbar({
                   <select
                     id="acting-role"
                     value={role}
-                    onChange={(e) => setRole(e.target.value)}
+                    onChange={(e) => handleRoleChange(e.target.value)}
                     className="w-full p-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg)] text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/40"
                   >
                     {ROLE_OPTIONS.map((o) => (

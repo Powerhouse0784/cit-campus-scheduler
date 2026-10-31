@@ -26,6 +26,7 @@ import {
   Ban,
   Check,
   Sparkles,
+  History,
 } from "lucide-react";
 
 interface SpectraEventsModuleProps {
@@ -98,13 +99,22 @@ export default function SpectraEventsModule({
   const [rejectReasonInput, setRejectReasonInput] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
 
+  // Decision History Audit Trail State (Task 113)
+  const [history, setHistory] = useState<any[]>([]);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+
+  // Alternative Suggestions State (Tasks 107 & 108)
+  const [alternatives, setAlternatives] = useState<any[]>([]);
+  const [loadingAlts, setLoadingAlts] = useState(false);
+  const [showAlternatives, setShowAlternatives] = useState(false);
+
   // Simulated identity switcher for testing Task 109 (Self-Approval)
   const [simulateIdentity, setSimulateIdentity] = useState<"standard" | "spectra_core">("standard");
 
   const currentUserName = useMemo(() => {
     if (simulateIdentity === "spectra_core") return "Spectra Core Team";
     switch (userRole) {
-      case "admin": return "Dean's Office";
+      case "admin": return "Dean&apos;s Office";
       case "department_coordinator": return "ECE Department";
       case "faculty": return "Dr. Amit Behera";
       case "club": return "Dance Club";
@@ -112,7 +122,25 @@ export default function SpectraEventsModule({
     }
   }, [userRole, simulateIdentity]);
 
-  // Fetch events from /api/cit/spectra
+  // Synchronize simulated identity with server session (Task 109 server check)
+  const toggleSimulateIdentity = async () => {
+    const nextVal = simulateIdentity === "standard" ? "spectra_core" : "standard";
+    setSimulateIdentity(nextVal);
+    try {
+      await fetch("/api/cit/auth/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          identity: nextVal === "spectra_core" ? "spectra_core" : undefined,
+          role: nextVal === "spectra_core" ? "admin" : userRole,
+          name: nextVal === "spectra_core" ? "Spectra Core Team" : undefined,
+          isSimulatedSelf: nextVal === "spectra_core",
+        }),
+      });
+    } catch {}
+  };
+
+  // Fetch events & history from /api/cit/spectra
   const fetchSpectraEvents = async () => {
     try {
       setLoading(true);
@@ -124,10 +152,83 @@ export default function SpectraEventsModule({
       }
       setEvents(data.events || []);
       setMetrics(data.metrics || null);
+      setHistory(data.history || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to reach Spectra API.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Load alternative venues and times (Tasks 107 & 108)
+  const loadAlternativesForEvent = async (ev: SpectraEvent) => {
+    setLoadingAlts(true);
+    setAlternatives([]);
+    try {
+      const res = await fetch("/api/cit/spectra", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "get_alternatives",
+          request_id: ev.requestId,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAlternatives(data.alternatives || []);
+      }
+    } catch {} finally {
+      setLoadingAlts(false);
+    }
+  };
+
+  // Submit Alternative Decision (Tasks 107 & 108)
+  const handleOfferAlternative = async (alt: any) => {
+    if (!selectedEvent) return;
+    setActionLoading(true);
+    setActionNotice(null);
+    try {
+      const res = await fetch("/api/cit/spectra", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "offer_alternative",
+          request_id: selectedEvent.requestId,
+          room_id: alt.room_id,
+          day: alt.day,
+          start_period: alt.start_period,
+          end_period: alt.end_period,
+          reason: alt.reason,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to offer alternative.");
+      }
+      setActionNotice({ type: "success", text: data.message });
+      setShowAlternatives(false);
+      fetchSpectraEvents();
+      if (selectedEvent) {
+        setSelectedEvent((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: "alternative_offered",
+                venue: alt.room_name || alt.room_id,
+                day: alt.day,
+                time: `P${alt.start_period}–P${alt.end_period}`,
+                reason: alt.reason,
+              }
+            : null
+        );
+      }
+    } catch (err) {
+      setActionNotice({
+        type: "error",
+        text: err instanceof Error ? err.message : "Failed to offer alternative.",
+      });
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -338,13 +439,13 @@ export default function SpectraEventsModule({
             </div>
             {userRole === "admin" && (
               <button
-                onClick={() => setSimulateIdentity((prev) => prev === "standard" ? "spectra_core" : "standard")}
+                onClick={toggleSimulateIdentity}
                 className="text-[10px] underline text-amber-300 hover:text-amber-200 transition font-semibold"
-                title="Toggle between Dean's Office and Spectra Core Team to verify Task 109 self-approval block on BR-01"
+                title="Toggle between Dean&apos;s Office and Spectra Core Team to verify Task 109 self-approval block on BR-01"
               >
                 {simulateIdentity === "standard"
                   ? "Test Task 109: Switch identity to 'Spectra Core Team'"
-                  : "Switch back to 'Dean's Office'"}
+                  : "Switch back to 'Dean&apos;s Office'"}
               </button>
             )}
           </div>
@@ -392,6 +493,14 @@ export default function SpectraEventsModule({
 
           {/* Right Action Buttons */}
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowHistoryModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] text-xs font-bold text-[var(--ink)] hover:bg-[var(--bg)] transition shadow-xs"
+              title="View Governance Decisions & Audit Log (Task 113)"
+            >
+              <History className="w-3.5 h-3.5 text-blue-600" />
+              <span>Decision History ({history.length})</span>
+            </button>
             <button
               onClick={fetchSpectraEvents}
               disabled={loading}
@@ -696,7 +805,7 @@ export default function SpectraEventsModule({
                 <div className="font-bold text-[var(--ink)]">CIT Governance Mandates:</div>
                 <p>• <strong>Curfew Limit:</strong> All student activities must terminate before Period 13 (22:00).</p>
                 <p>• <strong>Self-Approval Rule:</strong> Section 4 strictly prohibits any requester from approving their own event.</p>
-                <p>• <strong>Authority:</strong> Only Dean's Office or Department Coordinators hold approval authorization.</p>
+                <p>• <strong>Authority:</strong> Only Dean&apos;s Office or Department Coordinators hold approval authorization.</p>
               </div>
             )}
           </div>
@@ -728,7 +837,7 @@ export default function SpectraEventsModule({
 
               <button
                 onClick={() => {
-                  // Filter to current user's requests
+                  // Filter to current user&apos;s requests
                   setSearchQuery(currentUserName);
                 }}
                 className="p-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg)] hover:border-blue-500 transition text-center flex flex-col items-center gap-1 text-[10px] font-bold col-span-2"
@@ -858,6 +967,73 @@ export default function SpectraEventsModule({
               </p>
             </div>
 
+            {/* Tasks 107 & 108: Alternative Venue / Time Suggestions */}
+            <div className="p-3.5 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/60 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-bold text-blue-900 dark:text-blue-300 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Alternative Venue & Time Suggestions (Tasks 107 & 108)</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !showAlternatives;
+                    setShowAlternatives(next);
+                    if (next && selectedEvent) loadAlternativesForEvent(selectedEvent);
+                  }}
+                  className="text-[11px] font-bold text-blue-700 dark:text-blue-400 hover:underline flex items-center gap-1"
+                >
+                  {showAlternatives ? "Hide Suggestions" : "Find Alternatives"}
+                </button>
+              </div>
+
+              {showAlternatives && (
+                <div className="space-y-2 pt-1">
+                  {loadingAlts ? (
+                    <div className="text-xs text-[var(--muted)] flex items-center gap-2 py-2">
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Analyzing qualified rooms and zero-clash slots...</span>
+                    </div>
+                  ) : alternatives.length === 0 ? (
+                    <p className="text-xs text-[var(--muted)]">No contention detected for this request, or all potential alternative slots are occupied.</p>
+                  ) : (
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                      {alternatives.map((alt, idx) => (
+                        <div
+                          key={idx}
+                          className="p-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] flex items-center justify-between gap-2 text-xs"
+                        >
+                          <div>
+                            <div className="font-bold text-[var(--ink)] flex items-center gap-1.5">
+                              <Building className="w-3.5 h-3.5 text-indigo-500" />
+                              <span>{alt.room_name} ({alt.room_id})</span>
+                              <span className="font-normal text-[var(--muted)]">· Cap {alt.capacity}</span>
+                            </div>
+                            <div className="text-[11px] text-[var(--muted)] flex items-center gap-1 mt-0.5">
+                              <Clock className="w-3 h-3 text-blue-500" />
+                              <span>{alt.day} · P{alt.start_period}–P{alt.end_period}</span>
+                            </div>
+                            <div className="text-[10px] text-[var(--muted)] italic mt-0.5">{alt.reason}</div>
+                          </div>
+
+                          {canApproveOrReject && selectedEvent.status !== "approved" && selectedEvent.status !== "cancelled" && (
+                            <button
+                              type="button"
+                              disabled={actionLoading}
+                              onClick={() => handleOfferAlternative(alt)}
+                              className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11px] shrink-0 transition shadow-xs"
+                            >
+                              Offer This Slot
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Action Notice (Success / Error) */}
             {actionNotice && (
               <div
@@ -910,7 +1086,7 @@ export default function SpectraEventsModule({
                 <div>
                   <div className="font-bold">Task 109 Governance Rule: Self-Approval Strictly Prohibited</div>
                   <div className="text-[11px] mt-0.5">
-                    You cannot approve your own booking request ({selectedEvent.requester}). Approval must be executed by an independent officer from the Dean's Office.
+                    You cannot approve your own booking request ({selectedEvent.requester}). Approval must be executed by an independent officer from the Dean&apos;s Office.
                   </div>
                 </div>
               </div>
@@ -923,7 +1099,7 @@ export default function SpectraEventsModule({
                 <div>
                   <div className="font-bold">Task 110: Read-Only Role Permissions</div>
                   <div className="text-[11px] mt-0.5">
-                    Your current role (<strong>{userRole}</strong>) does not have administrative approval authorization. Only Dean's Office or Department Coordinators can approve or reject requests.
+                    Your current role (<strong>{userRole}</strong>) does not have administrative approval authorization. Only Dean&apos;s Office or Department Coordinators can approve or reject requests.
                   </div>
                 </div>
               </div>
@@ -982,6 +1158,72 @@ export default function SpectraEventsModule({
                   Close
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Task 113: Governance Decision History & Audit Trail Modal */}
+      {showHistoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl max-w-3xl w-full p-5 sm:p-6 space-y-4 shadow-modal max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">
+              <div className="flex items-center gap-2">
+                <History className="w-5 h-5 text-blue-600" />
+                <h3 className="text-lg font-bold text-[var(--ink)]">
+                  Governance Decision History & Audit Trail (Task 113)
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowHistoryModal(false)}
+                className="p-1.5 rounded-lg border border-[var(--border)] hover:bg-[var(--bg)]"
+              >
+                <X className="w-4 h-4 text-[var(--muted)]" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+              {history.length === 0 ? (
+                <div className="text-center py-10 text-xs text-[var(--muted)]">
+                  No governance decisions have been recorded yet in this session.
+                </div>
+              ) : (
+                history.map((h, i) => (
+                  <div
+                    key={h.id || i}
+                    className="p-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] text-xs space-y-1.5"
+                  >
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[11px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 px-1.5 py-0.5 rounded">
+                          {h.request_id}
+                        </span>
+                        <span className="font-bold text-[var(--ink)]">{h.event_title}</span>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${getStatusBadgeStyle(h.new_status)}`}>
+                        {h.new_status.toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-[var(--muted)] flex items-center gap-3">
+                      <span>By: <strong>{h.by_user}</strong> ({h.by_role})</span>
+                      {h.room_id && <span>Venue: <strong>{h.room_id}</strong> ({h.day} P{h.start_period}–P{h.end_period})</span>}
+                      <span>Timestamp: {new Date(h.timestamp).toLocaleString()}</span>
+                    </div>
+                    <div className="text-[11px] text-[var(--ink)] italic bg-[var(--surface)] p-2 rounded-lg border border-[var(--border)]">
+                      &quot;{h.reason}&quot;
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-[var(--border)] flex justify-end">
+              <button
+                onClick={() => setShowHistoryModal(false)}
+                className="px-4 py-2 rounded-xl border border-[var(--border)] text-xs font-bold text-[var(--muted)] hover:bg-[var(--bg)]"
+              >
+                Close History
+              </button>
             </div>
           </div>
         </div>

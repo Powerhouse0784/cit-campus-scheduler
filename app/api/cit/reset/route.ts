@@ -14,6 +14,13 @@ export async function POST() {
       } catch {}
     }
 
+    const spectraHistoryPath = path.join(rootDir, "data", "spectra_history.json");
+    if (fs.existsSync(spectraHistoryPath)) {
+      try {
+        fs.unlinkSync(spectraHistoryPath);
+      } catch {}
+    }
+
     const userBookingsPath = path.join(rootDir, "data", "user_bookings.json");
     if (fs.existsSync(userBookingsPath)) {
       try {

@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { BookingEngine } from "@/lib/booking-engine";
 import { apiError, readJsonBody } from "@/lib/api-response";
+import { getAuthenticatedSession } from "@/lib/auth-session";
 
 export async function GET() {
   try {
@@ -104,12 +105,17 @@ export async function POST(req: NextRequest) {
     const schedule = JSON.parse(fs.readFileSync(schedPath, "utf-8"));
     const engine = new BookingEngine(data);
 
+    // Authenticated server-side session identity
+    const session = getAuthenticatedSession(req);
+    const userRole = session.role;
+    const requester = session.name;
+
     // 1. ACTION: CHECK AVAILABILITY
     if (body.action === "check") {
       const result = engine.checkAvailability(
         {
           title: body.title,
-          role: body.role || "club",
+          role: userRole,
           requested_category: body.category || "club_event",
           attendance: parseInt(body.attendance, 10) || 50,
           day: body.day || "THU",
@@ -137,10 +143,6 @@ export async function POST(req: NextRequest) {
       const endP = startP + duration - 1;
       const day = body.day || "THU";
       const roomId = body.room_id || "AUD";
-      const userRole = body.role || "club";
-      const requester = (body.requester && typeof body.requester === "string" && body.requester.trim())
-        ? body.requester.trim()
-        : userRole === "admin" ? "Dean's Office" : userRole === "department_coordinator" ? "Department Coordinator" : "Campus Club Member";
 
       // Verify availability deterministically
       const checkResult = engine.checkAvailability(
@@ -239,7 +241,6 @@ export async function POST(req: NextRequest) {
       const requestId = body.request_id;
       if (!requestId) return apiError("Booking request_id is required.", 400);
 
-      const userRole = body.role || "club";
       if (userRole !== "admin" && userRole !== "department_coordinator") {
         return apiError("Unauthorized: Only Dean's Office or Department Coordinators can approve bookings.", 403);
       }
@@ -257,7 +258,7 @@ export async function POST(req: NextRequest) {
       if (!target) return apiError(`Booking ${requestId} not found in pending records.`, 404);
 
       target.status = "approved";
-      target.reason = `Approved by ${body.requester || userRole}.`;
+      target.reason = `Approved by ${requester} (${userRole}).`;
       fs.writeFileSync(userBookingsPath, JSON.stringify(userBookings, null, 2), "utf-8");
 
       // Also register in schedule.json
@@ -290,9 +291,6 @@ export async function POST(req: NextRequest) {
     if (body.action === "cancel") {
       const requestId = body.request_id;
       if (!requestId) return apiError("Booking request_id is required.", 400);
-
-      const userRole = body.role || "club";
-      const requester = typeof body.requester === "string" ? body.requester.trim() : "";
 
       let userBookings: any[] = [];
       if (fs.existsSync(userBookingsPath)) {
