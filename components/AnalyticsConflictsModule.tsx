@@ -331,14 +331,15 @@ export default function AnalyticsConflictsModule({ onNavigateTab, isDark = false
   };
 
   const kpis = [
-    { label: "Total Classes", value: "742", delta: "8%", up: true, good: true, Icon: CalendarDays, tint: "bg-[#DCE9FF] text-[#2563EB] dark:bg-[#15366B] dark:text-[#7FB0FF]", color: "#10B981", spark: "up" as const, bg: "kpi-blue" },
-    { label: "Room Utilization", value: "87%", delta: "5%", up: true, good: true, Icon: Users, tint: "bg-[#E4DCFF] text-[#7C3AED] dark:bg-[#2E2A6B] dark:text-[#B79BFF]", color: "#8B45FF", spark: "wave" as const, bg: "kpi-violet" },
+    { label: "Total Classes", value: "—", delta: "Sample data", up: true, good: true, Icon: CalendarDays, tint: "bg-[#DCE9FF] text-[#2563EB] dark:bg-[#15366B] dark:text-[#7FB0FF]", color: "#10B981", spark: "up" as const, bg: "kpi-blue" },
+    { label: "Room Utilization", value: "—", delta: "Sample data", up: true, good: true, Icon: Users, tint: "bg-[#E4DCFF] text-[#7C3AED] dark:bg-[#2E2A6B] dark:text-[#B79BFF]", color: "#8B45FF", spark: "wave" as const, bg: "kpi-violet" },
     { label: "Conflicts Detected", value: String(total), delta: "50%", up: false, good: true, Icon: AlertTriangle, tint: "bg-[#FFE1E4] text-[#EF4444] dark:bg-[#4A1224] dark:text-[#FF7A8C]", color: "#EF4444", spark: "wave" as const, bg: "kpi-rose" },
-    { label: "Schedule Health", value: "96%", delta: "2%", up: true, good: true, Icon: Check, tint: "bg-[#D3F3E2] text-[#059669] dark:bg-[#134B45] dark:text-[#4ADE80]", color: "#10B981", spark: "up" as const, bg: "kpi-green" },
+    { label: "Schedule Health", value: "—", delta: "Not validated", up: true, good: true, Icon: Check, tint: "bg-[#D3F3E2] text-[#059669] dark:bg-[#134B45] dark:text-[#4ADE80]", color: "#10B981", spark: "up" as const, bg: "kpi-green" },
   ];
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_330px] gap-5 sm:gap-6 items-start">
+      <p className="xl:col-span-2 text-xs text-[var(--muted)]" role="note">Prototype preview · several analytics series are illustrative and are not certified live performance metrics.</p>
       {/* ---------------- Main column ---------------- */}
       <div className="space-y-5 sm:space-y-6 min-w-0">
         <Hero isDark={isDark} onExplore={() => document.getElementById("analytics-charts")?.scrollIntoView({ behavior: "smooth" })} />

@@ -113,7 +113,7 @@ export default function ExamsModule({ onNavigateTab, isDark = false }: ExamsModu
 
   useEffect(() => setToday(new Date()), []);
 
-  const exams = EXAMS_BY_SEM[semester] ?? [];
+  const exams = useMemo(() => EXAMS_BY_SEM[semester] ?? [], [semester]);
   const dates = useMemo(() => Array.from(new Set(exams.map((e) => e.iso))), [exams]);
   const visible = day === "all" ? exams : exams.filter((e) => e.iso === day);
 

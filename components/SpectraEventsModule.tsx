@@ -7,35 +7,40 @@ import {
   Clock,
   MapPin,
   Flame,
-  Sparkles,
   ChevronDown,
   ArrowRight,
   CheckCircle2,
   Ticket,
-  FileText,
   X,
-  UserCheck,
   AlertTriangle,
 } from "lucide-react";
+
+type EventFilter = "all" | "upcoming" | "ongoing" | "past" | "my";
+type EventSort = "latest" | "earliest" | "priority";
+
+interface EventCard {
+  id: string; requestId: string; title: string; subtitle: string; dateDay: string; dateMonth: string;
+  time: string; venue: string; priority: string; priorityType: "high" | "medium" | "low";
+  status: "Upcoming" | "Ongoing" | "Past"; attendees: number; avatars: string[]; ctaText: string;
+  category: string; organizer: string; bgGradient: string; imageType: string;
+}
 
 interface SpectraEventsModuleProps {
   onNavigateTab?: (tab: string) => void;
   userRole?: string;
 }
 
-export default function SpectraEventsModule({
-  onNavigateTab,
-  userRole = "admin",
-}: SpectraEventsModuleProps) {
-  const [activeFilter, setActiveFilter] = useState<"all" | "upcoming" | "ongoing" | "past" | "my">("all");
-  const [sortBy, setSortBy] = useState<"latest" | "earliest" | "priority">("latest");
-  const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
+export default function SpectraEventsModule({ onNavigateTab }: SpectraEventsModuleProps) {
+  const [activeFilter, setActiveFilter] = useState<EventFilter>("all");
+  const [sortBy, setSortBy] = useState<EventSort>("latest");
+  const [selectedEvent, setSelectedEvent] = useState<EventCard | null>(null);
+  const [showGuidelines, setShowGuidelines] = useState(false);
   const [bookmarked, setBookmarked] = useState<Record<string, boolean>>({
     "tech-fest": true,
   });
 
   // Events matching the exact visual cards from your latest showcase
-  const events = [
+  const events: EventCard[] = [
     {
       id: "tech-fest",
       requestId: "BR-01",
@@ -99,7 +104,7 @@ export default function SpectraEventsModule({
   ];
 
   // Bookings list for the right panel
-  const [myBookings, setMyBookings] = useState([
+  const myBookings = [
     {
       id: "b1",
       title: "Tech Fest 2026",
@@ -121,7 +126,7 @@ export default function SpectraEventsModule({
       status: "Pending",
       icon: "🎮",
     },
-  ]);
+  ];
 
   const toggleBookmark = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -142,6 +147,8 @@ export default function SpectraEventsModule({
 
   return (
     <div className="space-y-6">
+      <p className="text-xs text-[var(--muted)]" role="note">Sample event showcase · dates, attendee counts and statuses are illustrative dataset values, not live bookings.</p>
+      <p className="text-xs text-[var(--muted)]" role="note">Prototype preview · event cards and booking history shown here are sample data, not live booking records.</p>
       {/* 1. SPECTRA WIDESCREEN HERO BANNER */}
       <section className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#091535] via-[#102C79] to-[#1E4DC9] text-white p-6 sm:p-9 shadow-card flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div className="relative z-10 max-w-xl">
@@ -182,16 +189,16 @@ export default function SpectraEventsModule({
         {/* Left Filter Pills with Counts */}
         <div className="flex flex-wrap items-center gap-2 bg-[var(--surface)] p-1.5 rounded-full border border-[var(--border)] shadow-xs">
           {[
-            { id: "all", label: "All Events", count: 24 },
-            { id: "upcoming", label: "Upcoming", count: 12 },
-            { id: "ongoing", label: "Ongoing", count: 5 },
-            { id: "past", label: "Past", count: 7 },
+            { id: "all", label: "All Events", count: events.length },
+            { id: "upcoming", label: "Upcoming", count: events.filter((event) => event.status === "Upcoming").length },
+            { id: "ongoing", label: "Ongoing", count: events.filter((event) => event.status === "Ongoing").length },
+            { id: "past", label: "Past", count: events.filter((event) => event.status === "Past").length },
           ].map((tab) => {
             const isActive = activeFilter === tab.id;
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveFilter(tab.id as any)}
+                onClick={() => setActiveFilter(tab.id as EventFilter)}
                 className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${
                   isActive
                     ? "bg-blue-600 text-white shadow-xs"
@@ -218,7 +225,8 @@ export default function SpectraEventsModule({
           <div className="relative">
             <select
               value={sortBy}
-              onChange={(e: any) => setSortBy(e.target.value)}
+              onChange={(e) => setSortBy(e.target.value as EventSort)}
+              aria-label="Sort events"
               className="appearance-none pl-3 pr-8 py-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] text-xs font-bold text-[var(--muted)] hover:text-[var(--ink)] focus:outline-none cursor-pointer"
             >
               <option value="latest">Sort by: Latest First</option>
@@ -433,17 +441,20 @@ export default function SpectraEventsModule({
               </button>
 
               <button
-                onClick={() =>
-                  alert(
-                    "Spectra Guidelines: Only approved Institute Events can displace regular classes. Curfew is Period 13 (22:00)."
-                  )
-                }
+                type="button"
+                aria-expanded={showGuidelines}
+                onClick={() => setShowGuidelines((value) => !value)}
                 className="p-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg)] hover:border-blue-500 transition text-center flex flex-col items-center gap-1 text-[10px] font-bold"
               >
                 <Ticket className="w-4 h-4 text-indigo-600 mb-0.5" />
                 <span>Event Guidelines</span>
               </button>
             </div>
+            {showGuidelines && (
+              <p role="status" className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3 text-xs text-[var(--muted)]">
+                Scheduling policy details are not connected to a policy service in this prototype. Verify event priority and period restrictions with the institute administrator before approving a request.
+              </p>
+            )}
           </div>
         </aside>
       </div>
@@ -501,28 +512,26 @@ export default function SpectraEventsModule({
               </div>
             </div>
 
-            {/* Validation Rule Summary */}
-            <div className="p-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 text-xs space-y-1">
-              <div className="font-bold text-blue-800 dark:text-blue-300 flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-blue-600" />
-                Rule-Engine Verification
+            {/* Prototype limitation: no live booking validator is called here. */}
+            <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 text-xs space-y-1">
+              <div className="font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4" />
+                Validation not performed
               </div>
-              <p className="text-[11px] text-blue-700 dark:text-blue-200">
-                Capacity verified against venue. No overlap with midsem exam week or teaching
-                periods.
+              <p className="text-[11px] text-amber-800 dark:text-amber-200">
+                This is sample event data. Venue capacity, timetable overlap and exam priority have not been checked by a live booking validator.
               </p>
             </div>
 
             {/* Role-Aware Action Buttons */}
             <div className="flex gap-2 pt-2">
               <button
-                onClick={() => {
-                  alert(`Request ${selectedEvent.requestId} approved and locked in schedule!`);
-                  setSelectedEvent(null);
-                }}
-                className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-xs"
+                type="button"
+                disabled
+                title="Approval API is not connected in this prototype"
+                className="flex-1 py-2.5 rounded-xl bg-slate-400 text-white text-xs font-bold cursor-not-allowed opacity-80"
               >
-                Confirm & Approve
+                Approval unavailable in demo
               </button>
               <button
                 onClick={() => setSelectedEvent(null)}

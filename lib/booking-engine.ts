@@ -1,4 +1,4 @@
-import { BookingRequest, BookingDecision, SessionOverride, Room, UserRole, Day } from "./types";
+import { BookingRequest, BookingDecision, SessionOverride, Room, UserRole, CITDataset, ScheduledSession } from "./types";
 
 const CAT_WEIGHT: Record<string, number> = {
   institute_event: 5,
@@ -28,9 +28,9 @@ export class BookingEngine {
   private cancellations: Set<string>;
   private rooms: Map<string, Room>;
 
-  constructor(dataset: any) {
+  constructor(dataset: CITDataset) {
     this.requests = dataset.booking_requests;
-    this.cancellations = new Set((dataset.cancellations || []).map((c: any) => c.request_id));
+    this.cancellations = new Set((dataset.cancellations || []).map((c) => c.request_id));
     this.rooms = new Map(dataset.rooms.map((r: Room) => [r.id, r]));
   }
 
@@ -41,7 +41,7 @@ export class BookingEngine {
     return PRIORITY_ORDER[Math.max(reqIndex, capIndex)];
   }
 
-  public processBookings(baseSchedule: any[]): { decisions: BookingDecision[]; overrides: SessionOverride[]; score: number } {
+  public processBookings(baseSchedule: ScheduledSession[]): { decisions: BookingDecision[]; overrides: SessionOverride[]; score: number } {
     const decisions: BookingDecision[] = [];
     const overrides: SessionOverride[] = [];
     let totalScore = 0;
@@ -109,7 +109,7 @@ export class BookingEngine {
 
           // Sort prefer requested_room if given
           if (req.requested_room) {
-            candidateRooms.sort((a, b) => (a.id === req.requested_room ? -1 : 1));
+            candidateRooms.sort((a, b) => Number(b.id === req.requested_room) - Number(a.id === req.requested_room));
           }
 
           for (const room of candidateRooms) {

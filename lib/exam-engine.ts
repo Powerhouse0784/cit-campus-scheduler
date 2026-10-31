@@ -1,4 +1,4 @@
-import { Exam, ExamAssignment, ExamDay, ExamSession, Room } from "./types";
+import { Exam, ExamAssignment, ExamDay, ExamSession, Room, CITDataset } from "./types";
 
 const EXAM_DAYS: ExamDay[] = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
 const EXAM_SESSIONS: ExamSession[] = ["AM", "PM"];
@@ -7,7 +7,7 @@ export class ExamEngine {
   private exams: Exam[];
   private rooms: Room[];
 
-  constructor(dataset: any) {
+  constructor(dataset: CITDataset) {
     this.exams = dataset.exams;
     this.rooms = dataset.rooms.filter((r: Room) => r.allowed_uses.includes("exam"));
   }

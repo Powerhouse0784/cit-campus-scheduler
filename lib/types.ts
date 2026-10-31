@@ -160,3 +160,86 @@ export interface ScheduleOutput {
   };
   exams: ExamAssignment[];
 }
+export interface CITDataset {
+  dataset_id: string;
+  rooms: Room[];
+  faculty: Faculty[];
+  student_groups: StudentGroup[];
+  courses: Course[];
+  sessions: Session[];
+  booking_requests: BookingRequest[];
+  cancellations: Cancellation[];
+  exams: Exam[];
+  room_unavailability: RoomUnavailability[];
+}
+
+export interface ScheduledSession extends SessionAssignment {
+  duration?: number;
+}
+
+export interface TimetableGridCell {
+  session_id: string;
+  course_id: string;
+  course_title: string;
+  department: string;
+  kind: Session["kind"];
+  duration: number;
+  room_id: string;
+  room_name: string;
+  faculty_id: string;
+  faculty_name: string;
+  groups: string[];
+  size: number;
+  start_period: number;
+}
+
+export type TimetableGrid = Record<Day, Record<number, TimetableGridCell[]>>;
+
+export interface SchedulePreviewRow {
+  date: Day;
+  period: string;
+  title: string;
+  room: string;
+  color: string;
+  bar: string;
+}
+
+export interface DashboardStats {
+  sessionsCount: number;
+  roomsInUse: number;
+  roomsTotal: number;
+  capacityPercent: number;
+  pendingApprovals: number;
+  previewRows: SchedulePreviewRow[];
+}
+
+export interface UtilisationStats {
+  percent: number;
+  roomsUsed: number;
+  roomsTotal: number;
+  bookedHours: number;
+  availableHours: number;
+  sessionCount: number;
+}
+
+export interface SpectraBooking extends BookingDecision {
+  title: string;
+  requester: string;
+  role: UserRole;
+  category: string;
+  attendance: number;
+  raw_text: string;
+}
+
+export interface ExamWithMeta extends ExamAssignment {
+  size: number;
+  groups: string[];
+  course_ids: string[];
+  duration_hours: number;
+}
+
+export type DisruptionChange =
+  | { type: "room_unavailable"; room_id: string; days: Day[] }
+  | { type: "faculty_unavailable"; faculty_id: string; days: Day[] }
+  | { type: "add_session"; session: Session }
+  | { type: "remove_session"; session_id: string };

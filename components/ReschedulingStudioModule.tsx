@@ -1,11 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
 import {
   ArrowLeftRight,
-  CheckCircle2,
   AlertTriangle,
-  Clock,
   Send,
   Calendar,
   Sparkles,
@@ -13,8 +10,6 @@ import {
 } from "lucide-react";
 
 export default function ReschedulingStudioModule() {
-  const [swapped, setSwapped] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
 
   // Timetable records matching the exact comparison table from the showcase
   const currentSchedule = [
@@ -35,6 +30,7 @@ export default function ReschedulingStudioModule() {
 
   return (
     <div className="space-y-6">
+      <p className="text-xs text-[var(--muted)]" role="note">Prototype preview · both timetable columns contain illustrative sample rows and are not live schedule versions.</p>
       {/* 1. WIDESCREEN HERO BANNER */}
       <section className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#0C1E4E] via-[#10308A] to-[#1E57D8] text-white p-6 sm:p-9 shadow-card flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div className="relative z-10 max-w-xl">
@@ -45,10 +41,12 @@ export default function ReschedulingStudioModule() {
             Compare Timetables. Get Approvals. Keep Campus in Sync.
           </p>
           <button
-            onClick={() => setSwapped(!swapped)}
-            className="px-5 py-2.5 rounded-full bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition shadow-md flex items-center gap-2 group"
+            type="button"
+            disabled
+            title="Rescheduling solver workflow is not connected"
+            className="px-5 py-2.5 rounded-full bg-blue-600/70 text-white text-xs font-bold cursor-not-allowed flex items-center gap-2 opacity-80"
           >
-            Start Rescheduling
+            Rescheduling preview only
             <Sparkles className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -112,13 +110,9 @@ export default function ReschedulingStudioModule() {
 
         {/* Center: Glowing Swap Connector Button */}
         <div className="flex justify-center my-2 lg:my-0">
-          <button
-            onClick={() => setSwapped(!swapped)}
-            title="Swap time slots"
-            className="p-3.5 rounded-full bg-gradient-to-tr from-blue-700 to-blue-500 hover:from-blue-600 hover:to-blue-400 text-white shadow-md hover:scale-105 transition-all"
-          >
+          <span className="p-3.5 rounded-full bg-slate-300 text-slate-600" title="Comparison preview only" aria-label="Comparison preview only">
             <ArrowLeftRight className="w-5 h-5" />
-          </button>
+          </span>
         </div>
 
         {/* Right: Proposed Timetable (with Highlighted Changes) */}
@@ -130,8 +124,8 @@ export default function ReschedulingStudioModule() {
                 Proposed Timetable
               </h3>
             </div>
-            <span className="px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-300 text-[10px] font-bold border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
-              Optimized →
+            <span className="px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[10px] font-bold border border-amber-200 dark:border-amber-800 flex items-center gap-1">
+              Sample preview
             </span>
           </div>
 
@@ -191,18 +185,15 @@ export default function ReschedulingStudioModule() {
               <span>Conflict Alert</span>
             </div>
             <div className="text-sm font-black text-rose-900 dark:text-rose-200 mt-1">
-              1 Conflict Detected
+              Conflict status unavailable
             </div>
             <p className="text-[11px] text-rose-800 dark:text-rose-300 mt-0.5">
-              Physics & Lab-1 are occupied at the same time.
+              No live conflict analysis has been run for this preview.
             </p>
           </div>
-          <button
-            onClick={() => alert("Conflict details: Moving Physics to Lab-2 completely resolves this clash.")}
-            className="mt-3 text-xs font-bold text-rose-700 dark:text-rose-400 hover:underline flex items-center gap-1"
-          >
-            View Details →
-          </button>
+          <p className="mt-3 text-[11px] text-rose-700 dark:text-rose-300">
+            Live conflict details are unavailable: this panel is illustrative sample data and no solver result is attached.
+          </p>
         </div>
 
         {/* Card 2: Approval Workflow Stepper */}
@@ -264,15 +255,17 @@ export default function ReschedulingStudioModule() {
               <h4 className="font-extrabold text-sm">Submit for Approval</h4>
             </div>
             <p className="text-[11px] text-blue-100 leading-relaxed">
-              Your changes will be reviewed by the coordinator. Confirmed conflict-free.
+              This sample proposal has not been validated or submitted. The approval workflow is not connected to a backend yet.
             </p>
           </div>
 
           <button
-            onClick={() => setSubmitted(true)}
-            className="mt-4 w-full py-2.5 rounded-xl bg-white text-blue-700 hover:bg-blue-50 text-xs font-extrabold transition shadow-sm flex items-center justify-center gap-1.5"
+            type="button"
+            disabled
+            title="Rescheduling submission API is not connected"
+            className="mt-4 w-full py-2.5 rounded-xl bg-white/70 text-blue-700 text-xs font-extrabold cursor-not-allowed opacity-80"
           >
-            {submitted ? "✓ Proposal Queued" : "Submit for Approval →"}
+            Submission unavailable in demo
           </button>
         </div>
       </div>

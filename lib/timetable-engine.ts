@@ -1,4 +1,4 @@
-import { Session, Room, Faculty, StudentGroup, SessionAssignment, Day } from "./types";
+import { Session, Room, Faculty, StudentGroup, SessionAssignment, CITDataset } from "./types";
 
 export interface Violation {
   rule: string;
@@ -14,7 +14,7 @@ export class TimetableEngine {
   private roomUnavail: Set<string>;
   private facUnavail: Set<string>;
 
-  constructor(dataset: any) {
+  constructor(dataset: CITDataset) {
     this.rooms = new Map(dataset.rooms.map((r: Room) => [r.id, r]));
     this.faculty = new Map(dataset.faculty.map((f: Faculty) => [f.id, f]));
     this.groups = new Map(dataset.student_groups.map((g: StudentGroup) => [g.id, g]));

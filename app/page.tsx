@@ -15,7 +15,13 @@ import AnalyticsConflictsModule from "@/components/AnalyticsConflictsModule";
 import SettingsRolesModule from "@/components/SettingsRolesModule";
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activeTab, setActiveTabRaw] = useState("dashboard");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const setActiveTab = (tab: string) => {
+    setActiveTabRaw(tab);
+    setSearchQuery(""); // the search box only filters the Timetable screen
+  };
   const [role, setRole] = useState("admin");
   const [isDark, setIsDark] = useState(false);
 
@@ -30,8 +36,16 @@ export default function Home() {
 
   const handleResetData = () => {
     fetch("/api/cit/reset", { method: "POST" })
-      .then(() => alert("Reset completed: Timetable and demo states restored to clean baseline."))
-      .catch(() => alert("Demo data reset!"));
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok || result?.success === false) {
+          throw new Error(result?.error || "Unable to reset demo data.");
+        }
+        window.alert("Demo data reset successfully.");
+      })
+      .catch((error) => {
+        window.alert(error instanceof Error ? error.message : "Unable to reset demo data.");
+      });
   };
 
   return (
@@ -48,6 +62,8 @@ export default function Home() {
           setRole={setRole}
           onReset={handleResetData}
           activeTab={activeTab}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
         />
 
         <main className="flex-1 px-4 sm:px-6 pb-28 md:pb-10 max-w-[1600px] w-full mx-auto space-y-6">
@@ -59,7 +75,13 @@ export default function Home() {
             />
           )}
 
-          {activeTab === "timetable" && <TimetableSection />}
+          {activeTab === "timetable" && (
+            <TimetableSection
+              isDark={isDark}
+              searchQuery={searchQuery}
+              onNavigateTab={(tab) => setActiveTab(tab)}
+            />
+          )}
 
           {activeTab === "venues" && <VenueBookingSection />}
 

@@ -31,6 +31,14 @@
   --course-rose: #FFE4E6;
   --course-cyan: #CCFBF1;
 
+  /* Course chip borders (Light) */
+  --chip-blue-border: #BCD3FA;
+  --chip-violet-border: #D3C8F6;
+  --chip-green-border: #BBE6CB;
+  --chip-amber-border: #F9D3AC;
+  --chip-rose-border: #F8C6CE;
+  --chip-cyan-border: #A6E8DC;
+
   --shadow-card: 0 8px 28px rgba(25, 55, 115, 0.08);
 
   /* ---- Dashboard shell (sidebar / top bar) ---- */
@@ -101,6 +109,14 @@
   --course-amber: #49301D;
   --course-rose: #482331;
   --course-cyan: #134E4A;
+
+  /* Course chip borders (Dark) */
+  --chip-blue-border: #2F63B8;
+  --chip-violet-border: #5B4A9E;
+  --chip-green-border: #2C7A63;
+  --chip-amber-border: #8A5A2E;
+  --chip-rose-border: #8A3E55;
+  --chip-cyan-border: #2A7C76;
 
   --shadow-card: 0 8px 28px rgba(0, 0, 0, 0.25);
 
@@ -195,6 +211,27 @@ h1, h2, h3, h4, .font-heading {
   .qa-lilac { background: var(--qa-lilac-bg); border-color: var(--qa-lilac-border); }
   .qa-green { background: var(--qa-green-bg); border-color: var(--qa-green-border); }
   .qa-rose  { background: var(--qa-rose-bg);  border-color: var(--qa-rose-border); }
+}
+
+/* ---------- Timetable course chips ---------- */
+@layer components {
+  .chip {
+    border-width: 1px;
+    border-radius: 0.875rem;
+    color: var(--ink);
+    transition: box-shadow 0.18s ease, opacity 0.18s ease, transform 0.18s ease;
+  }
+  .chip:hover { box-shadow: 0 8px 18px rgba(25, 55, 115, 0.14); transform: translateY(-1px); }
+  .chip-blue   { background: var(--course-blue);   border-color: var(--chip-blue-border); }
+  .chip-violet { background: var(--course-violet); border-color: var(--chip-violet-border); }
+  .chip-green  { background: var(--course-green);  border-color: var(--chip-green-border); }
+  .chip-amber  { background: var(--course-amber);  border-color: var(--chip-amber-border); }
+  .chip-rose   { background: var(--course-rose);   border-color: var(--chip-rose-border); }
+  .chip-cyan   { background: var(--course-cyan);   border-color: var(--chip-cyan-border); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chip { transition: none; }
+  .chip:hover { transform: none; }
 }
 
 /* ---------- Hero banner image fade + wave emoji ---------- */

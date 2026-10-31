@@ -14,7 +14,6 @@ import {
   Send,
   Clock,
   FileText,
-  Smile,
   BarChart3,
   Search,
   type LucideIcon,
@@ -25,6 +24,8 @@ interface AiAssistantModuleProps {
   userRole?: string;
   isDark?: boolean;
 }
+
+interface ParsedWindow { day: string; from_period: number; to_period: number; }
 
 interface Msg {
   id: number;
@@ -40,47 +41,6 @@ const PROMPTS: { text: string; Icon: LucideIcon }[] = [
   { text: "Check for conflicts", Icon: ShieldCheck },
   { text: "Suggest an alternative slot", Icon: Sparkles },
 ];
-
-/** Demo responder. Replace with your authenticated AI + rule-engine API. */
-function reply(q: string): Omit<Msg, "id" | "from" | "time"> {
-  const t = q.toLowerCase();
-  if (t.includes("conflict") || t.includes("clash"))
-    return {
-      text: "I found 1 possible room overlap. Review the affected classes and suggested alternatives before applying any change.",
-      items: [{ title: "Room Clash · Mon, 27 Oct", meta: "10:00 – 11:00 · LH-1 vs LH-2", status: "Needs review" }],
-    };
-  if (t.includes("free") || t.includes("slot") && t.includes("data"))
-    return {
-      text: "I looked for available faculty, room and student-group slots. These options satisfy the current timetable rules.",
-      items: [
-        { title: "Tue · P3", meta: "Room 201 · Dr. Sharma free", status: "Validated" },
-        { title: "Wed · P2", meta: "Room 316 · Dr. Sharma free", status: "Validated" },
-        { title: "Thu · P5", meta: "Lab 2 · Dr. Sharma free", status: "Validated" },
-      ],
-    };
-  if (t.includes("alternative") || t.includes("suggest"))
-    return {
-      text: "I found 3 validated alternatives. Compare their room availability, faculty availability and student impact before submitting for approval. I won't change anything until you confirm.",
-      items: [
-        { title: "Option A · Tue P3", meta: "Room 201 · 0 student clashes", status: "Validated" },
-        { title: "Option B · Wed P2", meta: "Room 316 · 0 student clashes", status: "Validated" },
-        { title: "Option C · Thu P5", meta: "Lab 2 · 1 minor overlap", status: "Needs review" },
-      ],
-    };
-  if (t.includes("monday") || t.includes("timetable") || t.includes("schedule"))
-    return {
-      text: "Here’s your Monday timetable. I found 4 scheduled classes. Would you like me to check for free periods?",
-      items: [
-        { title: "P1 · Math Lecture", meta: "Room 316" },
-        { title: "P2 · DSA Tutorial", meta: "Room 201" },
-        { title: "P4 · Physics Lab", meta: "Lab 1" },
-        { title: "P6 · Web Dev", meta: "Room 405" },
-      ],
-    };
-  return {
-    text: "I can help with your timetable, free slots and scheduling conflicts. Try “Show my Monday timetable” or “Check for conflicts”.",
-  };
-}
 
 const nowLabel = () => new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
@@ -170,7 +130,7 @@ function Hero({ isDark }: { isDark: boolean }) {
 /* ------------------------------------------------------------------ */
 export default function AiAssistantModule({ isDark = false }: AiAssistantModuleProps) {
   const [msgs, setMsgs] = useState<Msg[]>([
-    { id: 0, from: "bot", text: "Hello! 👋 I’m your CIT Timetable Assistant. How can I help you today?", time: "" },
+    { id: 0, from: "bot", text: "Hello! I can help parse venue booking requests in English or Hinglish. I use Groq (llama3-8b-8192) when available, with a deterministic rule-based fallback. All parsed results are drafts — scheduling validity is always checked by application code, never by the LLM.", time: "" },
   ]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
@@ -186,16 +146,43 @@ export default function AiAssistantModule({ isDark = false }: AiAssistantModuleP
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
   }, [msgs, thinking]);
 
-  const send = (value: string) => {
+  const send = async (value: string) => {
     const q = value.trim();
     if (!q || thinking) return;
     setMsgs((m) => [...m, { id: idRef.current++, from: "user", text: q, time: nowLabel() }]);
     setInput("");
     setThinking(true);
-    setTimeout(() => {
-      setMsgs((m) => [...m, { id: idRef.current++, from: "bot", time: nowLabel(), ...reply(q) }]);
+    try {
+      const response = await fetch("/api/ai/parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: q }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result?.error || "The request could not be parsed.");
+      const intent = result?.data ?? result;
+      const source = result?._source === "groq" ? "Groq (llama3-8b-8192)" : "rule-based parser (Groq unavailable or key not set)";
+      const summary = [
+        `Attendance: ${intent.attendance ?? "not detected"}`,
+        `Duration: ${intent.duration_periods ?? "not detected"} period(s)`,
+        `Time window: ${((intent.windows as ParsedWindow[] | undefined) || []).map((w) => `${w.day} P${w.from_period}–P${w.to_period}`).join(", ") || "not detected"}`,
+        `Room types: ${(intent.room_types || []).join(", ") || "not specified"}`,
+        `Facilities: ${(intent.needs || []).join(", ") || "none detected"}`,
+      ];
+      const notices = [intent.follow_up, intent.accessibility_warning].filter(Boolean).join(" ");
+      setMsgs((m) => [...m, {
+        id: idRef.current++, from: "bot", time: nowLabel(),
+        text: `Parsed via ${source}. This is a draft — availability and booking rules are not checked here.${notices ? ` ${notices}` : ""}`,
+        items: summary.map((line: string) => ({ title: line, meta: "Parsed from your message", status: "Needs review" as const })),
+      }]);
+    } catch (error) {
+      setMsgs((m) => [...m, {
+        id: idRef.current++, from: "bot", time: nowLabel(),
+        text: error instanceof Error ? error.message : "Unable to reach the parser. Please try again.",
+      }]);
+    } finally {
       setThinking(false);
-    }, 800);
+    }
   };
 
   const panel = "rounded-[20px] border bg-[var(--surface)]";
@@ -212,9 +199,9 @@ export default function AiAssistantModule({ isDark = false }: AiAssistantModuleP
   ];
 
   const stats: { label: string; value: string; Icon: LucideIcon }[] = [
-    { label: "Total Queries", value: "2.4K", Icon: FileText },
-    { label: "Saved Time", value: "120 hrs", Icon: Clock },
-    { label: "Happy Students", value: "98%", Icon: Smile },
+    { label: "LLM", value: "Groq llama3", Icon: FileText },
+    { label: "Fallback", value: "Rule-based", Icon: Clock },
+    { label: "Booking approval", value: "Manual review", Icon: ShieldCheck },
   ];
 
   return (
