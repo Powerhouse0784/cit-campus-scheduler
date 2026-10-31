@@ -46,23 +46,24 @@ export default function CitLogo({ compact = false, className = "" }: CitLogoProp
   return (
     <div
       className={`flex items-center gap-2.5 text-[var(--logo-ink)] ${className}`}
-      aria-label="CIT – Chilika Institute of Technology"
+      aria-label="CIT Timetable"
     >
       <CitMark className={compact ? "w-8 h-8" : "w-12 h-12"} />
       <div className="leading-none">
         <div
           className={`font-heading font-extrabold tracking-tight ${
-            compact ? "text-2xl" : "text-[34px]"
+            compact ? "text-2xl" : "text-[28px]"
           }`}
         >
           CIT
         </div>
         {!compact && (
-          <div className="mt-1 text-[11px] font-semibold leading-[1.15] tracking-tight">
-            Chilika Institute
-            <br />
-            of Technology
-          </div>
+          <>
+            <div className="mt-0.5 text-[17px] font-bold leading-none tracking-tight">Timetable</div>
+            <div className="mt-1 text-[10px] font-semibold leading-none tracking-tight opacity-90">
+              Plan. Organize. Excel.
+            </div>
+          </>
         )}
       </div>
     </div>

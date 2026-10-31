@@ -3,11 +3,9 @@
 import React from "react";
 import {
   Home,
-  CalendarDays,
-  CalendarCheck,
+  CalendarClock,
   ClipboardList,
   Star,
-  RefreshCcw,
   Sparkles,
   BarChart3,
   Settings,
@@ -23,11 +21,9 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { id: "dashboard", label: "Dashboard", icon: Home },
-  { id: "timetable", label: "Timetable", icon: CalendarDays },
-  { id: "venues", label: "Venue Booking", icon: CalendarCheck },
-  { id: "exams", label: "Exams", icon: ClipboardList },
   { id: "spectra", label: "Spectra Events", icon: Star },
-  { id: "changes", label: "Changes", icon: RefreshCcw },
+  { id: "changes", label: "Rescheduling Studio", icon: CalendarClock },
+  { id: "exams", label: "Exams", icon: ClipboardList },
   { id: "ai", label: "AI Assistant", icon: Sparkles },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
   { id: "settings", label: "Settings", icon: Settings },
