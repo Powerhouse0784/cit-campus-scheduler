@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import TopNavbar from "@/components/TopNavbar";
+import MobileNav from "@/components/MobileNav";
 import DashboardModule from "@/components/DashboardModule";
-import HeroBanner from "@/components/HeroBanner";
 import TimetableSection from "@/components/TimetableSection";
 import VenueBookingSection from "@/components/VenueBookingSection";
 import SpectraEventsModule from "@/components/SpectraEventsModule";
@@ -18,18 +18,9 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [role, setRole] = useState("admin");
   const [isDark, setIsDark] = useState(false);
-  const [scheduleData, setScheduleData] = useState<any>(null);
-
-  useEffect(() => {
-    fetch("/api/schedule")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => data && setScheduleData(data))
-      .catch((e) => console.error("Error fetching schedule:", e));
-  }, []);
 
   const toggleTheme = () => {
     setIsDark(!isDark);
-
     if (!isDark) {
       document.documentElement.setAttribute("data-theme", "dark");
     } else {
@@ -38,93 +29,77 @@ export default function Home() {
   };
 
   const handleResetData = () => {
-    alert(
-      "Reset completed: Timetable and demo states restored to clean baseline."
-    );
+    fetch("/api/cit/reset", { method: "POST" })
+      .then(() => alert("Reset completed: Timetable and demo states restored to clean baseline."))
+      .catch(() => alert("Demo data reset!"));
   };
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-[var(--bg)] text-[var(--ink)]">
-      {/* Sidebar Navigation */}
-      <Sidebar
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        role={role}
-        setRole={setRole}
-        onReset={handleResetData}
-      />
+    <div className="min-h-screen flex text-[var(--ink)]">
+      {/* Sidebar Navigation (desktop / tablet) */}
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
 
-      {/* Main Container */}
-      <main className="flex-1 p-5 md:p-8 max-w-[1600px] mx-auto w-full space-y-6 overflow-y-auto">
-        <TopNavbar isDark={isDark} toggleTheme={toggleTheme} role={role} />
+      {/* Main Content Column */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <TopNavbar
+          isDark={isDark}
+          toggleTheme={toggleTheme}
+          role={role}
+          setRole={setRole}
+          onReset={handleResetData}
+        />
 
-        {/* Dashboard Overview */}
-        {activeTab === "dashboard" && (
-          <div className="space-y-6">
-            <HeroBanner
-              title="Good Morning, Ritik! 👋"
-              subtitle="Welcome to CIT Campus Scheduler · Smart Scheduling. A Better Campus."
-              eyebrow="Week 07 · Semester Overview"
-              badge="0 Hard Conflicts"
-              type="dashboard"
-            />
-
+        <main className="flex-1 px-4 sm:px-6 pb-28 md:pb-10 max-w-[1600px] w-full mx-auto space-y-6">
+          {activeTab === "dashboard" && (
             <DashboardModule
               onNavigateTab={(tab) => setActiveTab(tab)}
               userRole={role}
               isDark={isDark}
             />
-          </div>
-        )}
+          )}
 
-        {/* Timetable */}
-        {activeTab === "timetable" && (
-          <TimetableSection scheduleData={scheduleData} />
-        )}
+          {activeTab === "timetable" && <TimetableSection />}
 
-        {/* Venues */}
-        {activeTab === "venues" && <VenueBookingSection />}
+          {activeTab === "venues" && <VenueBookingSection />}
 
-        {/* Spectra Events */}
-        {activeTab === "spectra" && (
-          <SpectraEventsModule
-            onNavigateTab={(tab) => setActiveTab(tab)}
-            userRole={role}
-          />
-        )}
+          {activeTab === "spectra" && (
+            <SpectraEventsModule
+              onNavigateTab={(tab) => setActiveTab(tab)}
+              userRole={role}
+            />
+          )}
 
-        {/* Rescheduling Studio */}
-        {activeTab === "changes" && <ReschedulingStudioModule />}
+          {activeTab === "changes" && <ReschedulingStudioModule />}
 
-        {/* Exams */}
-        {activeTab === "exams" && <ExamsModule />}
+          {activeTab === "exams" && <ExamsModule />}
 
-        {/* AI Assistant */}
-        {activeTab === "ai" && (
-          <AiAssistantModule
-            onNavigateTab={(tab) => setActiveTab(tab)}
-            userRole={role}
-          />
-        )}
+          {activeTab === "ai" && (
+            <AiAssistantModule
+              onNavigateTab={(tab) => setActiveTab(tab)}
+              userRole={role}
+            />
+          )}
 
-        {/* Analytics & Conflicts */}
-        {activeTab === "analytics" && (
-          <AnalyticsConflictsModule
-            onNavigateTab={(tab) => setActiveTab(tab)}
-            userRole={role}
-          />
-        )}
+          {activeTab === "analytics" && (
+            <AnalyticsConflictsModule
+              onNavigateTab={(tab) => setActiveTab(tab)}
+              userRole={role}
+            />
+          )}
 
-        {/* Settings */}
-        {activeTab === "settings" && (
-          <SettingsRolesModule
-            onNavigateTab={(tab) => setActiveTab(tab)}
-            userRole={role}
-            isDark={isDark}
-            toggleTheme={toggleTheme}
-          />
-        )}
-      </main>
+          {activeTab === "settings" && (
+            <SettingsRolesModule
+              onNavigateTab={(tab) => setActiveTab(tab)}
+              userRole={role}
+              isDark={isDark}
+              toggleTheme={toggleTheme}
+            />
+          )}
+        </main>
+      </div>
+
+      {/* Bottom tab bar (mobile) */}
+      <MobileNav activeTab={activeTab} setActiveTab={setActiveTab} />
     </div>
   );
 }
