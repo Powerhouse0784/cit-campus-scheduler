@@ -3,11 +3,10 @@
 import React, { useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import TopNavbar from "@/components/TopNavbar";
-import HeroBanner from "@/components/HeroBanner";
+import MobileNav from "@/components/MobileNav";
+import DashboardModule from "@/components/DashboardModule";
 import TimetableSection from "@/components/TimetableSection";
 import VenueBookingSection from "@/components/VenueBookingSection";
-
-// Import the 6 showcase modules
 import SpectraEventsModule from "@/components/SpectraEventsModule";
 import ReschedulingStudioModule from "@/components/ReschedulingStudioModule";
 import ExamsModule from "@/components/ExamsModule";
@@ -30,83 +29,79 @@ export default function Home() {
   };
 
   const handleResetData = () => {
-    alert("Reset completed: Timetable and demo states restored to clean baseline.");
+    fetch("/api/cit/reset", { method: "POST" })
+      .then(() => alert("Reset completed: Timetable and demo states restored to clean baseline."))
+      .catch(() => alert("Demo data reset!"));
   };
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-[var(--bg)] text-[var(--ink)]">
-      {/* Sidebar with Navigation Links */}
-      <Sidebar
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        role={role}
-        setRole={setRole}
-        onReset={handleResetData}
-      />
+    <div className="min-h-screen flex text-[var(--ink)]">
+      {/* Sidebar Navigation (desktop / tablet) */}
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
 
-      {/* Main Content Area */}
-      <main className="flex-1 p-5 md:p-8 max-w-[1600px] mx-auto w-full space-y-6 overflow-y-auto">
-        <TopNavbar isDark={isDark} toggleTheme={toggleTheme} role={role} />
+      {/* Main Content Column */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <TopNavbar
+          isDark={isDark}
+          toggleTheme={toggleTheme}
+          role={role}
+          setRole={setRole}
+          onReset={handleResetData}
+          activeTab={activeTab}
+        />
 
-        {/* Dashboard Overview */}
-        {activeTab === "dashboard" && (
-          <div className="space-y-6">
-            <HeroBanner
-              title="Good Morning, Ritik! 👋"
-              subtitle="Welcome to CIT Campus Scheduler · Smart Scheduling. A Better Campus."
-              eyebrow="Week 07 · Semester Overview"
-              badge="0 Hard Conflicts"
-              type="dashboard"
+        <main className="flex-1 px-4 sm:px-6 pb-28 md:pb-10 max-w-[1600px] w-full mx-auto space-y-6">
+          {activeTab === "dashboard" && (
+            <DashboardModule
+              onNavigateTab={(tab) => setActiveTab(tab)}
+              userRole={role}
+              isDark={isDark}
             />
-            {/* Quick overview grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div onClick={() => setActiveTab("spectra")} className="cursor-pointer">
-                <SpectraEventsModule />
-              </div>
-              <div onClick={() => setActiveTab("changes")} className="cursor-pointer">
-                <ReschedulingStudioModule />
-              </div>
-            </div>
-          </div>
-        )}
+          )}
 
-        {/* Individual Modules */}
-        {activeTab === "timetable" && (
-          <TimetableSection scheduleData={null} />
-        )}
+          {activeTab === "timetable" && <TimetableSection />}
 
-        {activeTab === "venues" && (
-          <VenueBookingSection />
-        )}
+          {activeTab === "venues" && <VenueBookingSection />}
 
-        {activeTab === "spectra" && (
-          <SpectraEventsModule onNavigateTab={(tab) => setActiveTab(tab)} userRole={role} />
-        )}
-        {activeTab === "changes" && (
-          <ReschedulingStudioModule />
-        )}
+          {activeTab === "spectra" && (
+            <SpectraEventsModule
+              onNavigateTab={(tab) => setActiveTab(tab)}
+              userRole={role}
+            />
+          )}
 
-        {activeTab === "exams" && (
-          <ExamsModule />
-        )}
+          {activeTab === "changes" && <ReschedulingStudioModule />}
 
-        {activeTab === "ai" && (
-          <AiAssistantModule onNavigateTab={(tab) => setActiveTab(tab)} userRole={role} />
-        )}
+          {activeTab === "exams" && <ExamsModule />}
 
-        {activeTab === "analytics" && (
-          <AnalyticsConflictsModule onNavigateTab={(tab) => setActiveTab(tab)} userRole={role} />
-        )}
+          {activeTab === "ai" && (
+            <AiAssistantModule
+              onNavigateTab={(tab) => setActiveTab(tab)}
+              userRole={role}
+            />
+          )}
 
-        {activeTab === "settings" && (
-          <SettingsRolesModule
-            onNavigateTab={(tab) => setActiveTab(tab)}
-            userRole={role}
-            isDark={isDark}
-            toggleTheme={toggleTheme}
-          />
-        )}
-      </main>
+          {activeTab === "analytics" && (
+            <AnalyticsConflictsModule
+              onNavigateTab={(tab) => setActiveTab(tab)}
+              userRole={role}
+              isDark={isDark}
+            />
+          )}
+
+          {activeTab === "settings" && (
+            <SettingsRolesModule
+              onNavigateTab={(tab) => setActiveTab(tab)}
+              userRole={role}
+              isDark={isDark}
+              toggleTheme={toggleTheme}
+            />
+          )}
+        </main>
+      </div>
+
+      {/* Bottom tab bar (mobile) */}
+      <MobileNav activeTab={activeTab} setActiveTab={setActiveTab} />
     </div>
   );
 }

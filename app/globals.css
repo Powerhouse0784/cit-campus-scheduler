@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,600;0,700;1,500;1,600&family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500;1,600&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -30,8 +30,47 @@
   --course-amber: #FFEDD5;
   --course-rose: #FFE4E6;
   --course-cyan: #CCFBF1;
-  
+
   --shadow-card: 0 8px 28px rgba(25, 55, 115, 0.08);
+
+  /* ---- Dashboard shell (sidebar / top bar) ---- */
+  --page-bg: linear-gradient(180deg, #F8FAFF 0%, #F1F5FF 100%);
+  --sidebar-bg: linear-gradient(180deg, #F1F5FF 0%, #E6EDFF 100%);
+  --sidebar-border: #DCE5F8;
+  --nav-ink: #2A3F78;
+  --nav-active-bg: linear-gradient(90deg, #1A62EA 0%, #2F7BF5 100%);
+  --nav-active-shadow: 0 8px 18px rgba(37, 99, 235, 0.32);
+  --nav-hover: rgba(37, 99, 235, 0.08);
+  --logo-ink: #123A82;
+  --search-bg: #F0F5FF;
+  --search-border: #D6E3FA;
+  --pill-bg: #FFFFFF;
+  --pill-shadow: 0 4px 14px rgba(25, 55, 115, 0.08);
+
+  /* ---- Dashboard KPI cards ---- */
+  --kpi-blue-bg: linear-gradient(135deg, #F1F6FF 0%, #FFFFFF 75%);
+  --kpi-blue-border: #D8E5FB;
+  --kpi-violet-bg: linear-gradient(135deg, #F5F2FF 0%, #FFFFFF 75%);
+  --kpi-violet-border: #E1DAFA;
+  --kpi-green-bg: linear-gradient(135deg, #EFFAF4 0%, #FFFFFF 75%);
+  --kpi-green-border: #CDEFDD;
+  --kpi-amber-bg: linear-gradient(135deg, #FFF6EC 0%, #FFFFFF 75%);
+  --kpi-amber-border: #FBE1C6;
+
+  /* ---- Quick action tiles ---- */
+  --kpi-rose-bg: linear-gradient(135deg, #FFF1F2 0%, #FFFFFF 75%);
+  --kpi-rose-border: #FBD5D9;
+
+  --qa-blue-bg: #E4EDFF;
+  --qa-blue-border: #D3E2FF;
+  --qa-peach-bg: #FFEADD;
+  --qa-peach-border: #FFDCC7;
+  --qa-lilac-bg: #EEE9FF;
+  --qa-lilac-border: #E0D8FF;
+  --qa-rose-bg: #FFE5EA;
+  --qa-rose-border: #FFD3DB;
+
+  --row-hover: rgba(37, 99, 235, 0.05);
 }
 
 [data-theme="dark"] {
@@ -60,11 +99,49 @@
   --course-amber: #49301D;
   --course-rose: #482331;
   --course-cyan: #134E4A;
-  
+
   --shadow-card: 0 8px 28px rgba(0, 0, 0, 0.25);
+
+  --page-bg: linear-gradient(180deg, #0A1329 0%, #070E1F 100%);
+  --sidebar-bg: linear-gradient(180deg, #0F1A35 0%, #0A1329 100%);
+  --sidebar-border: #1A2A4A;
+  --nav-ink: #D5E0F7;
+  --nav-active-bg: linear-gradient(90deg, #1A62EA 0%, #2F7BF5 100%);
+  --nav-active-shadow: 0 8px 20px rgba(37, 99, 235, 0.35);
+  --nav-hover: rgba(96, 165, 250, 0.1);
+  --logo-ink: #FFFFFF;
+  --search-bg: #0F1B35;
+  --search-border: #21355C;
+  --pill-bg: #0F1B35;
+  --pill-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+
+  --kpi-blue-bg: linear-gradient(135deg, #12244A 0%, #0D1830 80%);
+  --kpi-blue-border: #1E3560;
+  --kpi-violet-bg: linear-gradient(135deg, #1A1C48 0%, #0F1831 80%);
+  --kpi-violet-border: #2B3068;
+  --kpi-green-bg: linear-gradient(135deg, #0F3033 0%, #0D1A2E 80%);
+  --kpi-green-border: #1F5550;
+  --kpi-amber-bg: linear-gradient(135deg, #2A2020 0%, #101A2E 80%);
+  --kpi-amber-border: #4A3526;
+
+  --kpi-rose-bg: linear-gradient(135deg, #3A1424 0%, #14152B 80%);
+  --kpi-rose-border: #5A2338;
+
+  --qa-blue-bg: #14264B;
+  --qa-blue-border: #1F3866;
+  --qa-peach-bg: #2D2229;
+  --qa-peach-border: #473130;
+  --qa-lilac-bg: #1E1D4A;
+  --qa-lilac-border: #302F6B;
+  --qa-rose-bg: #34192B;
+  --qa-rose-border: #52233C;
+
+  --row-hover: rgba(96, 165, 250, 0.07);
 }
 
 body {
+  background: var(--page-bg);
+  background-attachment: fixed;
   background-color: var(--bg);
   color: var(--ink);
   font-family: 'Plus Jakarta Sans', sans-serif;
@@ -78,6 +155,66 @@ h1, h2, h3, h4, .font-heading {
 
 .font-serif-heading {
   font-family: 'Fraunces', serif;
+}
+
+/* ---------- Dashboard component classes ---------- */
+@layer components {
+  .kpi-card {
+    position: relative;
+    overflow: hidden;
+    border-radius: 1.125rem;
+    border-width: 1px;
+    box-shadow: 0 6px 22px rgba(25, 55, 115, 0.06);
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+  }
+  .kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 30px rgba(25, 55, 115, 0.12);
+  }
+  .kpi-blue   { background: var(--kpi-blue-bg);   border-color: var(--kpi-blue-border); }
+  .kpi-violet { background: var(--kpi-violet-bg); border-color: var(--kpi-violet-border); }
+  .kpi-green  { background: var(--kpi-green-bg);  border-color: var(--kpi-green-border); }
+  .kpi-rose   { background: var(--kpi-rose-bg);   border-color: var(--kpi-rose-border); }
+  .kpi-amber  { background: var(--kpi-amber-bg);  border-color: var(--kpi-amber-border); }
+
+  .qa-tile {
+    border-width: 1px;
+    border-radius: 1rem;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  }
+  .qa-tile:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 22px rgba(25, 55, 115, 0.12);
+  }
+  .qa-blue  { background: var(--qa-blue-bg);  border-color: var(--qa-blue-border); }
+  .qa-peach { background: var(--qa-peach-bg); border-color: var(--qa-peach-border); }
+  .qa-lilac { background: var(--qa-lilac-bg); border-color: var(--qa-lilac-border); }
+  .qa-rose  { background: var(--qa-rose-bg);  border-color: var(--qa-rose-border); }
+}
+
+/* ---------- Hero banner image fade + wave emoji ---------- */
+.hero-img {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 6%, #000 55%);
+  mask-image: linear-gradient(to bottom, transparent 6%, #000 55%);
+}
+@media (min-width: 768px) {
+  .hero-img {
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, rgba(0, 0, 0, 0.55) 14%, #000 40%);
+    mask-image: linear-gradient(to right, transparent 0%, rgba(0, 0, 0, 0.55) 14%, #000 40%);
+  }
+}
+
+@keyframes wave {
+  0%, 60%, 100% { transform: rotate(0deg); }
+  10%, 30% { transform: rotate(14deg); }
+  20%, 40% { transform: rotate(-8deg); }
+  50% { transform: rotate(10deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kpi-card, .qa-tile { transition: none; }
+  .kpi-card:hover, .qa-tile:hover { transform: none; }
+  [class*="animate-[wave"] { animation: none !important; }
 }
 
 /* Custom Scrollbar for Timetable Grids */
