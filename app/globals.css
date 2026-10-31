@@ -246,6 +246,13 @@ h1, h2, h3, h4, .font-heading {
   }
 }
 
+@media (min-width: 1024px) {
+  .hero-img.hero-img-both {
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, rgba(0, 0, 0, 0.55) 12%, #000 30%, #000 78%, transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0%, rgba(0, 0, 0, 0.55) 12%, #000 30%, #000 78%, transparent 100%);
+  }
+}
+
 @keyframes wave {
   0%, 60%, 100% { transform: rotate(0deg); }
   10%, 30% { transform: rotate(14deg); }

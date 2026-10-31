@@ -83,16 +83,29 @@ export default function Home() {
             />
           )}
 
-          {activeTab === "venues" && <VenueBookingSection userRole={role} />}
+          {activeTab === "venues" && (
+            <VenueBookingSection
+              userRole={role}
+              isDark={isDark}
+              onNavigateTab={(tab) => setActiveTab(tab)}
+            />
+          )}
 
           {activeTab === "spectra" && (
             <SpectraEventsModule
               onNavigateTab={(tab) => setActiveTab(tab)}
               userRole={role}
+              isDark={isDark}
             />
           )}
 
-          {activeTab === "changes" && <ReschedulingStudioModule />}
+          {activeTab === "changes" && (
+            <ReschedulingStudioModule
+              onNavigateTab={(tab) => setActiveTab(tab)}
+              userRole={role}
+              isDark={isDark}
+            />
+          )}
 
           {activeTab === "exams" && (
             <ExamsModule

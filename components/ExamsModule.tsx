@@ -77,10 +77,10 @@ function Hero({ isDark, onView }: { isDark: boolean; onView: () => void }) {
       }}
     >
       <div
-        className="hero-img absolute bottom-0 right-0 h-[44%] w-full md:h-full md:w-[60%] bg-cover bg-[position:72%_100%] md:bg-[position:center_62%]"
-        style={{ backgroundImage: `url(/images/hero-campus-${isDark ? "dark" : "light"}.jpg)` }}
+        className="hero-img hero-img-both absolute bottom-0 right-0 h-[48%] w-full md:h-full md:w-[50%] lg:right-[9%] lg:w-[52%] bg-cover bg-[position:70%_100%] md:bg-right"
+        style={{ backgroundImage: `url(/images/exams-hero-${isDark ? "dark" : "light"}.jpg)` }}
         role="img"
-        aria-label="CIT campus"
+        aria-label="Students preparing for exams in front of the CIT campus"
       />
       <div className="relative z-10 px-5 pt-5 pb-4 sm:px-8 md:py-0 max-w-[560px]">
         <h1 className="font-serif-heading font-bold tracking-tight text-[28px] sm:text-[40px] leading-[1.05]">

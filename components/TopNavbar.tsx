@@ -110,6 +110,10 @@ export default function TopNavbar({
                 ? "Search analytics, rooms, or events..."
                 : activeTab === "exams"
                 ? "Search exams, subjects, or courses..."
+                : activeTab === "changes"
+                ? "Search timetable, faculty, room..."
+                : activeTab === "spectra"
+                ? "Search events, clubs, or organizers..."
                 : activeTab === "ai"
                 ? 'Search anything... (e.g. "Show Monday exams")'
                 : "Search anything... (e.g. room 101, CS Lab)"

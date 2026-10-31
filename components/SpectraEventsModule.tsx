@@ -27,11 +27,14 @@ import {
   Check,
   Sparkles,
   History,
+  Leaf,
+  type LucideIcon,
 } from "lucide-react";
 
 interface SpectraEventsModuleProps {
   onNavigateTab?: (tab: string) => void;
   userRole?: string;
+  isDark?: boolean;
 }
 
 export interface SpectraEvent {
@@ -71,9 +74,42 @@ interface Metrics {
   booking_score: number;
 }
 
+const STATUS_LABEL: Record<string, string> = {
+  approved: "Approved",
+  pending: "Pending",
+  alternative_offered: "Alternative",
+  rejected: "Rejected",
+  cancelled: "Cancelled",
+};
+
+const AVATAR_TONES = ["from-[#F59E8B] to-[#C2410C]", "from-[#8FB4F5] to-[#1D4ED8]", "from-[#86D9B5] to-[#047857]"];
+
+/** Priority label from the server's priority weight (never colour alone: text + icon). */
+function priorityInfo(weight: number): { label: string; Icon: LucideIcon; cls: string } {
+  if (weight >= 8)
+    return { label: "High Priority", Icon: Flame, cls: "bg-[#FFE3E0] text-[#C2260F] dark:bg-[#4A1A16] dark:text-[#FF9A8A]" };
+  if (weight >= 5)
+    return { label: "Medium Priority", Icon: Leaf, cls: "bg-[#DDF5E3] text-[#1B7A3A] dark:bg-[#12402A] dark:text-[#6EE7A0]" };
+  return { label: "Low Priority", Icon: Flame, cls: "bg-[#FFE8D2] text-[#B45309] dark:bg-[#4A3016] dark:text-[#FFC27A]" };
+}
+
+/** Artwork for a card, picked from the event title / category. */
+function eventImage(ev: { title: string; category: string }): string {
+  const t = ev.title.toLowerCase();
+  if (/(game|gaming|esport|code|hack|sprint|quiz|robo|sport|tournament)/.test(t)) return "/images/spectra/gaming.jpg";
+  if (/(cultur|dance|music|drama|night|concert|fashion|art)/.test(t)) return "/images/spectra/dance.jpg";
+  if (ev.category === "club_event") return "/images/spectra/gaming.jpg";
+  if (ev.category === "department_event") return "/images/spectra/dance.jpg";
+  return "/images/spectra/crowd.jpg";
+}
+
+const ctaLabel = (status: string) =>
+  status === "pending" ? "Request Approval" : status === "alternative_offered" ? "Review Alternative" : "View Details";
+
 export default function SpectraEventsModule({
   onNavigateTab,
   userRole = "admin",
+  isDark = false,
 }: SpectraEventsModuleProps) {
   const [events, setEvents] = useState<SpectraEvent[]>([]);
   const [metrics, setMetrics] = useState<Metrics | null>(null);
@@ -114,7 +150,7 @@ export default function SpectraEventsModule({
   const currentUserName = useMemo(() => {
     if (simulateIdentity === "spectra_core") return "Spectra Core Team";
     switch (userRole) {
-      case "admin": return "Dean&apos;s Office";
+      case "admin": return "Dean's Office";
       case "department_coordinator": return "ECE Department";
       case "faculty": return "Dr. Amit Behera";
       case "club": return "Dance Club";
@@ -315,6 +351,12 @@ export default function SpectraEventsModule({
       });
   }, [events, activeCategory, activeStatus, searchQuery, sortBy]);
 
+  // "My Bookings": the signed-in user's own requests (falls back to the first three)
+  const myBookings = useMemo(() => {
+    const mine = events.filter((e) => e.requester.toLowerCase() === currentUserName.toLowerCase());
+    return (mine.length ? mine : events).slice(0, 3);
+  }, [events, currentUserName]);
+
   // Governance Actions (Approve, Reject, Cancel)
   const handleGovernanceAction = async (action: "approve" | "reject" | "cancel") => {
     if (!selectedEvent) return;
@@ -379,89 +421,98 @@ export default function SpectraEventsModule({
 
   return (
     <div className="space-y-6">
-      {/* 1. SPECTRA WIDESCREEN HERO BANNER */}
-      <section className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#091535] via-[#102C79] to-[#1E4DC9] text-white p-6 sm:p-8 shadow-card flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-        <div className="relative z-10 max-w-xl">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-xs font-bold text-blue-200 mb-3">
-            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-            <span>Festival Scheduling & Governance Engine · Crunch Week</span>
-          </div>
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-serif-heading font-bold tracking-tight mb-2">
+      {/* 1. HERO */}
+      <section
+        className="relative overflow-hidden rounded-[22px] text-white min-h-[210px] md:min-h-[170px] lg:min-h-[176px] flex items-start md:items-center"
+        style={{
+          background: isDark
+            ? "linear-gradient(100deg,#040A2A 0%,#0A1566 45%,#2E2AA8 100%)"
+            : "linear-gradient(100deg,#0B1655 0%,#1B2D9E 42%,#4B3CD8 100%)",
+          boxShadow: isDark
+            ? "0 0 0 1px rgba(90,110,255,.55), 0 14px 40px rgba(60,60,255,.28)"
+            : "0 14px 40px rgba(40,50,160,.30)",
+        }}
+      >
+        <div
+          className="hero-img hero-img-both absolute bottom-0 right-0 h-[46%] w-full md:h-full md:w-[56%] lg:right-[12%] lg:w-[58%] bg-cover bg-[position:60%_100%] md:bg-right"
+          style={{ backgroundImage: `url(/images/spectra/hero-${isDark ? "dark" : "light"}.jpg)` }}
+          role="img"
+          aria-label="Festival crowd in front of the CIT campus"
+        />
+        <div className="relative z-10 px-5 pt-5 pb-4 sm:px-8 md:py-0 max-w-[560px]">
+          <h1 className="font-serif-heading font-bold tracking-tight text-[30px] sm:text-[40px] leading-[1.05]">
             Spectra Events
           </h1>
-          <p className="text-sm sm:text-base font-bold text-blue-200 mb-1">
-            Book. Approve. Celebrate.
+          <p className="mt-1.5 font-heading font-extrabold text-[15px] sm:text-[19px]">Book. Approve. Celebrate.</p>
+          <p className="mt-1 text-[12.5px] sm:text-[14px] font-medium text-white/90">
+            From college fests to club events — all in one place.
           </p>
-          <p className="text-xs text-blue-100/90 leading-relaxed mb-4">
-            Official CIT fest venue bookings, priority-weighted approvals, and Section 4 governance controls.
-          </p>
+          <button
+            onClick={() => document.getElementById("spectra-events-grid")?.scrollIntoView({ behavior: "smooth" })}
+            className="mt-3.5 inline-flex items-center gap-2 h-9 px-5 rounded-full text-[13px] font-bold text-white border border-sky-300/70 bg-[#0B2A9A]/80 hover:bg-[#1239B8] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+            style={{ boxShadow: "0 0 16px rgba(110,130,255,.5)" }}
+          >
+            Explore Events <ArrowRight className="w-4 h-4" strokeWidth={2.5} />
+          </button>
+        </div>
+        <div className="hidden lg:block absolute right-8 top-1/2 -translate-y-1/2 -rotate-6 text-right z-10 pointer-events-none">
+          <div className="font-serif-heading italic font-semibold text-[30px] leading-[1.02] [text-shadow:0_2px_10px_rgba(0,10,70,.95)]">
+            Campus
+            <br />
+            Comes Alive!
+          </div>
+          <svg viewBox="0 0 150 10" className="ml-auto mt-1 w-28 h-2.5" aria-hidden="true">
+            <path d="M3 7C40 2 100 2 147 5" stroke="#F5B731" strokeWidth="2.8" strokeLinecap="round" fill="none" />
+          </svg>
+        </div>
+      </section>
 
-          {/* Quick Metrics Bar */}
+      {/* Metrics + governance tools (kept from the working module) */}
+      {(metrics || userRole === "admin") && (
+        <div className="flex flex-wrap items-center gap-2 text-[11.5px]">
           {metrics && (
-            <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-              <span className="px-2.5 py-1 rounded-lg bg-white/15 backdrop-blur-sm border border-white/20 font-bold">
+            <>
+              <span className="px-2.5 py-1 rounded-full border bg-[var(--surface)] font-bold" style={{ borderColor: "var(--border)" }}>
                 Total: {metrics.total_requests}
               </span>
-              <span className="px-2.5 py-1 rounded-lg bg-emerald-500/25 border border-emerald-400/40 text-emerald-200 font-bold">
+              <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 font-bold">
                 ✓ Approved: {metrics.approved_count}
               </span>
-              <span className="px-2.5 py-1 rounded-lg bg-amber-500/25 border border-amber-400/40 text-amber-200 font-bold">
+              <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 font-bold">
                 ⇄ Alternatives: {metrics.alternative_count}
               </span>
-              <span className="px-2.5 py-1 rounded-lg bg-rose-500/25 border border-rose-400/40 text-rose-200 font-bold">
+              <span className="px-2.5 py-1 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 font-bold">
                 ✕ Rejected: {metrics.rejected_count}
               </span>
-              <span className="px-2.5 py-1 rounded-lg bg-slate-500/25 border border-slate-400/40 text-slate-200 font-bold">
+              <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 font-bold">
                 ⊘ Cancelled: {metrics.cancelled_count}
               </span>
-              <span className="px-2.5 py-1 rounded-lg bg-yellow-500/30 border border-yellow-300/40 text-yellow-200 font-extrabold">
+              <span className="px-2.5 py-1 rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-950/50 dark:text-yellow-300 font-extrabold">
                 Score: {metrics.booking_score.toFixed(1)} / 100
               </span>
-            </div>
+            </>
           )}
-        </div>
-
-        {/* Right Callout & Testing Identity Helper */}
-        <div className="relative z-10 flex flex-col items-end gap-3">
-          <div className="text-right hidden sm:block">
-            <div className="text-3xl lg:text-4xl font-extrabold italic font-serif-heading text-white drop-shadow-[0_2px_12px_rgba(37,99,235,0.7)] tracking-wide">
-              Campus
-              <br />
-              Comes Alive!
-            </div>
-            <div className="h-1 w-24 bg-gradient-to-r from-amber-400 to-yellow-300 rounded-full ml-auto mt-2 shadow-sm" />
-          </div>
-
-          {/* Identity Simulation Pill (Task 109 Testing Tool) */}
-          <div className="bg-black/35 backdrop-blur-md border border-white/20 p-2.5 rounded-xl text-right text-xs">
-            <div className="text-[10px] text-blue-200 font-semibold mb-1">
-              Active User: <span className="text-white font-bold">{currentUserName}</span> ({userRole})
-            </div>
+          <span className="ml-auto text-[11px] text-[var(--muted)] font-semibold">
+            Active user: <span className="text-[var(--ink)] font-bold">{currentUserName}</span> ({userRole})
             {userRole === "admin" && (
               <button
                 onClick={toggleSimulateIdentity}
-                className="text-[10px] underline text-amber-300 hover:text-amber-200 transition font-semibold"
-                title="Toggle between Dean&apos;s Office and Spectra Core Team to verify Task 109 self-approval block on BR-01"
+                className="ml-2 underline text-blue-600 dark:text-sky-400 hover:opacity-80 transition font-semibold"
+                title="Toggle between Dean's Office and Spectra Core Team to verify Task 109 self-approval block on BR-01"
               >
-                {simulateIdentity === "standard"
-                  ? "Test Task 109: Switch identity to 'Spectra Core Team'"
-                  : "Switch back to 'Dean&apos;s Office'"}
+                {simulateIdentity === "standard" ? "Test self-approval block (Task 109)" : "Switch back to Dean's Office"}
               </button>
             )}
-          </div>
+          </span>
         </div>
+      )}
 
-        {/* Ambient Stage Glow */}
-        <div className="absolute right-0 bottom-0 w-96 h-56 bg-gradient-to-t from-purple-500/25 to-blue-400/20 rounded-full blur-3xl pointer-events-none" />
-      </section>
-
-      {/* 2. FILTER TABS, SEARCH & SORT CONTROLS */}
+      {/* 2. TABS, SORT, STATUS + SEARCH */}
       <div className="space-y-3">
-        {/* Category Pills (Task 97) */}
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-1.5 bg-[var(--surface)] p-1.5 rounded-full border border-[var(--border)] shadow-xs">
+          <div className="flex items-center gap-2 overflow-x-auto max-w-full pb-1" role="tablist" aria-label="Event categories">
             {[
-              { id: "all", label: "All Categories", count: events.length },
+              { id: "all", label: "All Events", count: events.length },
               { id: "institute_event", label: "Institute Events", count: events.filter((e) => e.category === "institute_event").length },
               { id: "guest_lecture", label: "Guest Lectures", count: events.filter((e) => e.category === "guest_lecture").length },
               { id: "department_event", label: "Dept. Events", count: events.filter((e) => e.category === "department_event").length },
@@ -471,19 +522,20 @@ export default function SpectraEventsModule({
               return (
                 <button
                   key={tab.id}
+                  role="tab"
+                  aria-selected={isActive}
                   onClick={() => setActiveCategory(tab.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-                    isActive
-                      ? "bg-blue-600 text-white shadow-xs"
-                      : "text-[var(--muted)] hover:text-[var(--ink)]"
+                  className={`shrink-0 inline-flex items-center gap-2 h-9 px-4 rounded-full border text-[12.5px] font-bold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 ${
+                    isActive ? "text-white border-transparent" : "hover:bg-[var(--row-hover)]"
                   }`}
+                  style={
+                    isActive
+                      ? { background: "linear-gradient(110deg,#155BFF,#2F7BF5)", boxShadow: "0 8px 18px rgba(21,91,255,.38)" }
+                      : { background: "var(--surface)", borderColor: "var(--border)" }
+                  }
                 >
-                  <span>{tab.label}</span>
-                  <span
-                    className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                      isActive ? "bg-white/20 text-white" : "bg-[var(--border)] text-[var(--muted)]"
-                    }`}
-                  >
+                  {tab.label}
+                  <span className={`text-[11px] px-1.5 rounded-full ${isActive ? "bg-white/25" : "bg-[var(--search-bg)] text-[var(--muted)]"}`}>
                     {tab.count}
                   </span>
                 </button>
@@ -491,34 +543,46 @@ export default function SpectraEventsModule({
             })}
           </div>
 
-          {/* Right Action Buttons */}
           <div className="flex items-center gap-2">
+            <div className="relative">
+              <select
+                value={sortBy}
+                onChange={(e: any) => setSortBy(e.target.value)}
+                aria-label="Sort events"
+                className="appearance-none h-9 pl-4 pr-9 rounded-full border bg-[var(--surface)] text-[12.5px] font-bold focus:outline-none cursor-pointer"
+                style={{ borderColor: "var(--border)" }}
+              >
+                <option value="priority">Sort by: Priority</option>
+                <option value="id">Sort by: Request Ref</option>
+                <option value="attendance">Sort by: Attendance</option>
+                <option value="day">Sort by: Day of Week</option>
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
             <button
               onClick={() => setShowHistoryModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] text-xs font-bold text-[var(--ink)] hover:bg-[var(--bg)] transition shadow-xs"
+              className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-full border bg-[var(--surface)] text-[12.5px] font-bold hover:bg-[var(--row-hover)] transition"
+              style={{ borderColor: "var(--border)" }}
               title="View Governance Decisions & Audit Log (Task 113)"
             >
-              <History className="w-3.5 h-3.5 text-blue-600" />
-              <span>Decision History ({history.length})</span>
+              <History className="w-3.5 h-3.5 text-blue-600 dark:text-sky-400" />
+              <span className="hidden sm:inline">Decision History</span> ({history.length})
             </button>
             <button
               onClick={fetchSpectraEvents}
               disabled={loading}
-              className="p-2 rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:text-[var(--ink)] transition"
-              title="Refresh events list"
+              aria-label="Refresh events list"
+              className="w-9 h-9 rounded-full border bg-[var(--surface)] flex items-center justify-center text-[var(--muted)] hover:text-[var(--ink)] transition"
+              style={{ borderColor: "var(--border)" }}
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
             </button>
           </div>
         </div>
 
-        {/* Secondary Filter Row: Status, Search, and Sort */}
-        <div className="flex flex-wrap items-center justify-between gap-3 bg-[var(--surface)] p-3 rounded-2xl border border-[var(--border)] shadow-xs">
-          {/* Status Pills */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] font-bold text-[var(--muted)] uppercase tracking-wider mr-1">
-              Status:
-            </span>
+            <span className="text-[11px] font-bold text-[var(--muted)] uppercase tracking-wider mr-1">Status</span>
             {[
               { id: "all", label: "All" },
               { id: "approved", label: "Approved" },
@@ -530,52 +594,33 @@ export default function SpectraEventsModule({
               <button
                 key={st.id}
                 onClick={() => setActiveStatus(st.id)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
+                aria-pressed={activeStatus === st.id}
+                className={`px-2.5 py-1 rounded-full text-[11.5px] font-bold transition ${
                   activeStatus === st.id
                     ? "bg-blue-100 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-300 dark:border-blue-800"
-                    : "text-[var(--muted)] hover:bg-[var(--bg)]"
+                    : "text-[var(--muted)] hover:bg-[var(--row-hover)] border border-transparent"
                 }`}
               >
                 {st.label}
               </button>
             ))}
           </div>
-
-          {/* Search & Sort */}
-          <div className="flex items-center gap-3 w-full sm:w-auto">
-            <div className="relative flex-1 sm:w-60">
-              <Search className="w-3.5 h-3.5 text-[var(--muted)] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search event, ref, venue..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 rounded-full border border-[var(--border)] bg-[var(--bg)] text-xs font-medium placeholder:text-[var(--muted)] focus:outline-none focus:border-blue-500"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--muted)] hover:text-[var(--ink)]"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-
-            <div className="relative shrink-0">
-              <select
-                value={sortBy}
-                onChange={(e: any) => setSortBy(e.target.value)}
-                aria-label="Sort events"
-                className="appearance-none pl-3 pr-8 py-1.5 rounded-full border border-[var(--border)] bg-[var(--bg)] text-xs font-bold text-[var(--muted)] hover:text-[var(--ink)] focus:outline-none cursor-pointer"
-              >
-                <option value="priority">Sort by: Priority Weight</option>
-                <option value="id">Sort by: Request Ref (BR-01)</option>
-                <option value="attendance">Sort by: Attendance</option>
-                <option value="day">Sort by: Day of Week</option>
-              </select>
-              <ChevronDown className="w-3.5 h-3.5 text-[var(--muted)] absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-            </div>
+          <div className="relative w-full sm:w-64">
+            <Search className="w-3.5 h-3.5 text-[var(--muted)] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search events, clubs, or organizers..."
+              aria-label="Search events"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full h-9 pl-9 pr-8 rounded-full border text-[12.5px] font-medium placeholder:text-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+              style={{ background: "var(--search-bg)", borderColor: "var(--search-border)" }}
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery("")} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--muted)] hover:text-[var(--ink)]">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -588,10 +633,9 @@ export default function SpectraEventsModule({
         </div>
       )}
 
-      {/* 3. MAIN CONTENT: EVENT CARDS GRID + SIDEBAR PANELS */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_290px] gap-6 items-start">
-        {/* Left Column: Event Cards Grid */}
-        <div>
+      {/* 3. EVENT CARDS + RIGHT RAIL */}
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_272px] gap-5 sm:gap-6 items-start">
+        <div id="spectra-events-grid" className="scroll-mt-4 min-w-0">
           {loading && events.length === 0 ? (
             <div className="py-20 text-center text-xs text-[var(--muted)] flex flex-col items-center justify-center gap-3">
               <RefreshCw className="w-6 h-6 animate-spin text-blue-600" />
@@ -599,8 +643,8 @@ export default function SpectraEventsModule({
             </div>
           ) : filteredEvents.length === 0 ? (
             <div className="py-16 text-center text-xs text-[var(--muted)] bg-[var(--surface)] rounded-2xl border border-[var(--border)] p-6 space-y-2">
-              <p className="font-bold text-sm">No events match the selected criteria.</p>
-              <p>Try resetting the category filter or clearing your search term.</p>
+              <p className="font-bold text-sm">No events found</p>
+              <p>Try changing your filters or search terms.</p>
               <button
                 onClick={() => { setActiveCategory("all"); setActiveStatus("all"); setSearchQuery(""); }}
                 className="px-4 py-2 mt-2 rounded-xl bg-blue-600 text-white font-bold text-xs"
@@ -609,244 +653,259 @@ export default function SpectraEventsModule({
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-2 min-[1420px]:grid-cols-3 gap-4">
               {filteredEvents.map((ev) => {
                 const isBookmarked = bookmarked[ev.requestId];
+                const pr = priorityInfo(ev.priorityWeight);
+                const open = () => {
+                  setSelectedEvent(ev);
+                  setActionNotice(null);
+                  setShowRejectForm(false);
+                };
+                const initials = ev.requester
+                  .split(/\s+/)
+                  .filter(Boolean)
+                  .slice(0, 3)
+                  .map((w) => w[0]?.toUpperCase());
                 return (
-                  <div
+                  <article
                     key={ev.requestId}
-                    onClick={() => {
-                      setSelectedEvent(ev);
-                      setActionNotice(null);
-                      setShowRejectForm(false);
+                    onClick={open}
+                    className="group rounded-[18px] bg-[var(--surface)] border overflow-hidden flex flex-col cursor-pointer transition hover:-translate-y-0.5"
+                    style={{
+                      borderColor: isDark ? "#1B4F9C" : "var(--border)",
+                      boxShadow: isDark ? "0 0 0 1px rgba(30,100,220,.15), 0 10px 26px rgba(0,60,200,.14)" : "var(--shadow-card)",
                     }}
-                    className="group rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-xs hover:shadow-card transition-all duration-200 overflow-hidden flex flex-col justify-between cursor-pointer hover:border-blue-500/50"
                   >
-                    <div>
-                      {/* Card Thumbnail Image Area */}
-                      <div
-                        className={`relative h-28 bg-gradient-to-br ${getCardHeaderGradient(ev.category)} p-3 flex flex-col justify-between overflow-hidden`}
+                    <div
+                      className="relative h-[112px] bg-cover bg-center"
+                      style={{ backgroundImage: `url(${eventImage(ev)})` }}
+                      role="img"
+                      aria-label={`${ev.title} artwork`}
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/25" />
+                      <button
+                        onClick={(e) => toggleBookmark(ev.requestId, e)}
+                        aria-label={isBookmarked ? "Remove bookmark" : "Bookmark event"}
+                        aria-pressed={!!isBookmarked}
+                        className={`absolute left-3 top-3 w-9 h-9 rounded-xl flex items-center justify-center backdrop-blur-md border border-white/40 transition ${
+                          isBookmarked ? "bg-white text-blue-600" : "bg-black/30 text-white hover:bg-white/25"
+                        }`}
                       >
-                        {/* Top Row: Bookmark & Status Badge */}
-                        <div className="flex justify-between items-center relative z-10">
-                          <button
-                            onClick={(e) => toggleBookmark(ev.requestId, e)}
-                            aria-label="Bookmark event"
-                            className={`p-1.5 rounded-lg backdrop-blur-md border border-white/20 transition ${
-                              isBookmarked
-                                ? "bg-white text-blue-600"
-                                : "bg-black/30 text-white hover:bg-white/20"
-                            }`}
-                          >
-                            <Bookmark className="w-3.5 h-3.5 fill-current" />
-                          </button>
-
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border backdrop-blur-md ${getStatusBadgeStyle(ev.status)}`}>
-                            {ev.status === "alternative_offered" ? "Alternative" : ev.status.toUpperCase()}
-                          </span>
-                        </div>
-
-                        {/* Request ID + Category Pill */}
-                        <div className="relative z-10 flex items-center justify-between text-white">
-                          <span className="font-mono text-xs font-bold bg-black/40 px-2 py-0.5 rounded-md border border-white/10">
-                            {ev.requestId}
-                          </span>
-                          <span className="text-[10px] font-semibold text-white/90">
-                            Weight: {ev.priorityWeight}
-                          </span>
-                        </div>
-
-                        {/* Soft background shape */}
-                        <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-white/10 rounded-full blur-xl pointer-events-none" />
-                      </div>
-
-                      {/* Card Body */}
-                      <div className="p-4 space-y-3">
-                        {/* Day Box + Title */}
-                        <div className="flex items-start gap-2.5">
-                          <div className="text-center p-1.5 rounded-xl bg-[var(--bg)] border border-[var(--border)] min-w-[44px] shrink-0">
-                            <div className="text-[9px] font-bold text-[var(--muted)] uppercase leading-none">
-                              DAY
-                            </div>
-                            <div className="text-sm font-black font-heading leading-tight mt-0.5 text-blue-600">
-                              {ev.day}
-                            </div>
-                          </div>
-
-                          <div className="min-w-0">
-                            <h3 className="font-extrabold text-sm text-[var(--ink)] line-clamp-1 group-hover:text-blue-600 transition">
-                              {ev.title}
-                            </h3>
-                            <p className="text-[10px] text-[var(--muted)] font-medium truncate">
-                              {ev.requester} {ev.department ? `(${ev.department})` : ""}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Time & Venue Meta Row */}
-                        <div className="flex items-center justify-between text-[10px] text-[var(--muted)] font-semibold pt-1 border-t border-[var(--border)]/60">
-                          <div className="flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-blue-500 shrink-0" />
-                            <span>{ev.time}</span>
-                          </div>
-                          <div className="flex items-center gap-1 truncate max-w-[130px]">
-                            <MapPin className="w-3 h-3 text-indigo-500 shrink-0" />
-                            <span className="truncate">{ev.venue}</span>
-                          </div>
-                        </div>
-
-                        {/* Priority Badge + Attendees */}
-                        <div className="flex items-center justify-between pt-1">
-                          <span
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold border ${getCategoryBadgeStyle(
-                              ev.category
-                            )}`}
-                          >
-                            <Flame className="w-2.5 h-2.5 fill-current" />
-                            {ev.priority}
-                          </span>
-
-                          <div className="flex items-center gap-1 text-[10px] font-bold text-[var(--muted)]">
-                            <Users className="w-3 h-3 text-blue-600" />
-                            <span>{ev.attendance}</span>
-                          </div>
-                        </div>
-                      </div>
+                        <Bookmark className="w-4 h-4 fill-current" />
+                      </button>
+                      <span className={`absolute right-3 top-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border shadow-md ${getStatusBadgeStyle(ev.status)}`}>
+                        <Calendar className="w-3 h-3" />
+                        {STATUS_LABEL[ev.status] ?? ev.status}
+                      </span>
                     </div>
 
-                    {/* Bottom CTA Button */}
-                    <div className="p-3 pt-0">
+                    <div className="p-3.5 flex flex-col gap-2.5 flex-1">
+                      <div className="flex items-start gap-3">
+                        <div className="w-11 shrink-0 text-center leading-none pt-0.5">
+                          <div className="text-[10px] font-bold text-[var(--muted)] tracking-wider">DAY</div>
+                          <div className="mt-1 font-heading font-extrabold text-[19px]">{ev.day}</div>
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="font-heading font-extrabold text-[15px] leading-tight line-clamp-2 group-hover:text-blue-600 dark:group-hover:text-sky-400 transition">
+                            {ev.title}
+                          </h3>
+                          <p className="mt-0.5 text-[11.5px] text-[var(--muted)] font-medium truncate">
+                            {ev.requestId} • {ev.requester}
+                            {ev.department ? ` • ${ev.department}` : ""}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5 text-[12px] font-semibold">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-3.5 h-3.5 shrink-0" />
+                          <span>{ev.time}</span>
+                        </div>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <MapPin className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">{ev.venue}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 mt-auto pt-0.5">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11.5px] font-bold ${pr.cls}`}>
+                          <pr.Icon className="w-3.5 h-3.5 fill-current" />
+                          {pr.label}
+                        </span>
+                        <span className="flex items-center gap-1.5" aria-label={`${ev.attendance} expected attendees`}>
+                          <span className="flex -space-x-2">
+                            {AVATAR_TONES.map((tone, i) => (
+                              <span
+                                key={i}
+                                className={`w-6 h-6 rounded-full ring-2 ring-[var(--surface)] bg-gradient-to-br ${tone} text-white text-[10px] font-extrabold flex items-center justify-center`}
+                              >
+                                {initials[i] ?? "•"}
+                              </span>
+                            ))}
+                          </span>
+                          <span className="text-[12px] font-extrabold text-blue-600 dark:text-sky-400">+{ev.attendance}</span>
+                        </span>
+                      </div>
+
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          setSelectedEvent(ev);
-                          setActionNotice(null);
-                          setShowRejectForm(false);
+                          open();
                         }}
-                        className="w-full py-2 rounded-xl bg-[var(--bg)] hover:bg-blue-600 hover:text-white border border-[var(--border)] text-xs font-bold transition flex items-center justify-center gap-1.5"
+                        className="w-full h-10 rounded-xl text-white text-[13px] font-bold flex items-center justify-center gap-1.5 transition hover:brightness-110"
+                        style={{ background: "linear-gradient(110deg,#155BFF,#2F7BF5)", boxShadow: "0 8px 18px rgba(21,91,255,.3)" }}
                       >
-                        <span>Review Request</span>
-                        <ArrowRight className="w-3.5 h-3.5" />
+                        {ctaLabel(ev.status)} <ArrowRight className="w-4 h-4" strokeWidth={2.5} />
                       </button>
                     </div>
-                  </div>
+                  </article>
                 );
               })}
             </div>
           )}
         </div>
 
-        {/* Right Column: Priority Hierarchy & Quick Actions */}
-        <aside className="space-y-4">
-          {/* Section 4 Priority Rules Card */}
-          <div className="p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-xs space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="font-extrabold text-xs uppercase tracking-wider font-heading flex items-center gap-1.5">
-                <Award className="w-4 h-4 text-amber-500" />
-                <span>Priority Hierarchy</span>
-              </h3>
+        {/* Right rail */}
+        <aside className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-1 gap-4 sm:gap-5 min-w-0">
+          {/* My Bookings */}
+          <section
+            className="rounded-[18px] border bg-[var(--surface)] p-4"
+            style={{
+              borderColor: isDark ? "#1B4F9C" : "var(--border)",
+              boxShadow: isDark ? "0 0 0 1px rgba(30,100,220,.15)" : "var(--shadow-card)",
+            }}
+            aria-labelledby="mb-h"
+          >
+            <div className="flex items-center justify-between mb-2.5">
+              <h2 id="mb-h" className="font-heading font-extrabold text-[15px]">My Bookings</h2>
               <button
-                type="button"
-                onClick={() => setShowGuidelines((prev) => !prev)}
-                className="text-[10px] font-bold text-blue-600 hover:underline"
+                onClick={() => {
+                  setActiveCategory("all");
+                  setActiveStatus("all");
+                  setSearchQuery(currentUserName);
+                }}
+                className="text-[12px] font-bold text-blue-600 dark:text-sky-400 hover:underline flex items-center gap-1"
               >
-                {showGuidelines ? "Hide" : "Details"}
+                View All <ArrowRight className="w-3.5 h-3.5" strokeWidth={2.6} />
               </button>
             </div>
+            <ul>
+              {myBookings.map((ev) => (
+                <li key={ev.requestId} className="border-t first:border-t-0" style={{ borderColor: "var(--border)" }}>
+                  <button
+                    onClick={() => {
+                      setSelectedEvent(ev);
+                      setActionNotice(null);
+                      setShowRejectForm(false);
+                    }}
+                    className="w-full flex items-center gap-3 py-2.5 text-left hover:bg-[var(--row-hover)] rounded-lg transition"
+                  >
+                    <span
+                      className="w-11 h-11 rounded-lg bg-cover bg-center shrink-0 border"
+                      style={{ backgroundImage: `url(${eventImage(ev)})`, borderColor: "var(--border)" }}
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0 flex-1 leading-tight">
+                      <span className="block font-bold text-[12.5px] truncate">{ev.title}</span>
+                      <span className="block text-[11px] text-[var(--muted)] font-medium">
+                        {ev.day} • {ev.time}
+                      </span>
+                    </span>
+                    <span className={`shrink-0 px-2 py-0.5 rounded-md text-[10.5px] font-bold border ${getStatusBadgeStyle(ev.status)}`}>
+                      {STATUS_LABEL[ev.status] ?? ev.status}
+                    </span>
+                  </button>
+                </li>
+              ))}
+              {myBookings.length === 0 && (
+                <li className="py-4 text-center text-[12px] text-[var(--muted)] font-medium">
+                  No bookings yet. Your event requests will appear here.
+                </li>
+              )}
+            </ul>
+          </section>
 
-            <p className="text-[11px] text-[var(--muted)] leading-relaxed">
-              CIT Section 4 dictates strict allocation hierarchy during Crunch Week:
-            </p>
-
-            <div className="space-y-2 text-xs">
-              <div className="p-2 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 flex items-center justify-between">
-                <div>
-                  <div className="font-bold text-purple-900 dark:text-purple-300">1. Exams & Regular Sessions</div>
-                  <div className="text-[10px] text-purple-700 dark:text-purple-400">Strictly immune to preemption</div>
-                </div>
-                <span className="text-[10px] font-mono font-bold bg-purple-200 dark:bg-purple-900 px-1.5 py-0.5 rounded">
-                  P1–P9
-                </span>
-              </div>
-
-              <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 flex items-center justify-between">
-                <div>
-                  <div className="font-bold text-blue-900 dark:text-blue-300">2. Institute Events</div>
-                  <div className="text-[10px] text-blue-700 dark:text-blue-400">Tech Fest Inauguration, Convocation</div>
-                </div>
-                <span className="text-[10px] font-mono font-bold bg-blue-200 dark:bg-blue-900 px-1.5 py-0.5 rounded">
-                  Weight: 10
-                </span>
-              </div>
-
-              <div className="p-2 rounded-xl bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 flex items-center justify-between">
-                <div>
-                  <div className="font-bold text-teal-900 dark:text-teal-300">3. Distinguished Lectures</div>
-                  <div className="text-[10px] text-teal-700 dark:text-teal-400">ISRO, Industry Leaders</div>
-                </div>
-                <span className="text-[10px] font-mono font-bold bg-teal-200 dark:bg-teal-900 px-1.5 py-0.5 rounded">
-                  Weight: 8
-                </span>
-              </div>
-
-              <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 flex items-center justify-between">
-                <div>
-                  <div className="font-bold text-amber-900 dark:text-amber-300">4. Dept & Club Events</div>
-                  <div className="text-[10px] text-amber-700 dark:text-amber-400">Competitions, Hackathons, Cultural</div>
-                </div>
-                <span className="text-[10px] font-mono font-bold bg-amber-200 dark:bg-amber-900 px-1.5 py-0.5 rounded">
-                  Weight: 2–5
-                </span>
-              </div>
+          {/* Quick Actions */}
+          <section
+            className="rounded-[18px] border bg-[var(--surface)] p-4"
+            style={{
+              borderColor: isDark ? "#1B4F9C" : "var(--border)",
+              boxShadow: isDark ? "0 0 0 1px rgba(30,100,220,.15)" : "var(--shadow-card)",
+            }}
+            aria-labelledby="qa-sp-h"
+          >
+            <h2 id="qa-sp-h" className="font-heading font-extrabold text-[15px] mb-2.5">Quick Actions</h2>
+            <div className="grid grid-cols-3 gap-2.5">
+              {[
+                { label: "View Timetable", Icon: Calendar, run: () => onNavigateTab && onNavigateTab("timetable") },
+                { label: "My Requests", Icon: CheckCircle2, run: () => setSearchQuery(currentUserName) },
+                { label: "Event Guidelines", Icon: FileText, run: () => setShowGuidelines((p) => !p) },
+              ].map((a) => (
+                <button
+                  key={a.label}
+                  onClick={a.run}
+                  className="qa-tile qa-blue min-h-[84px] px-1.5 py-2.5 flex flex-col items-center justify-center gap-1.5 text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
+                >
+                  <a.Icon className="w-5 h-5 text-blue-600 dark:text-sky-300" strokeWidth={2.1} />
+                  <span className="text-[11px] font-bold leading-tight">{a.label}</span>
+                </button>
+              ))}
             </div>
+          </section>
 
-            {showGuidelines && (
-              <div className="p-3 rounded-xl bg-[var(--bg)] border border-[var(--border)] text-[11px] text-[var(--muted)] space-y-1.5 mt-2">
+          {/* Event Guidelines (Section 4 priority hierarchy) */}
+          {showGuidelines && (
+            <section className="rounded-[18px] border bg-[var(--surface)] p-4 space-y-3 md:col-span-2 xl:col-span-1" style={{ borderColor: "var(--border)", boxShadow: "var(--shadow-card)" }}>
+              <div className="flex items-center justify-between">
+                <h2 className="font-heading font-extrabold text-[15px] flex items-center gap-1.5">
+                  <Award className="w-4 h-4 text-amber-500" /> Event Guidelines
+                </h2>
+                <button type="button" onClick={() => setShowGuidelines(false)} className="text-[11px] font-bold text-blue-600 dark:text-sky-400 hover:underline">
+                  Hide
+                </button>
+              </div>
+              <p className="text-[11px] text-[var(--muted)] leading-relaxed">
+                CIT Section 4 dictates strict allocation hierarchy during Crunch Week:
+              </p>
+              <div className="space-y-2 text-xs">
+                <div className="p-2 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 flex items-center justify-between gap-2">
+                  <div>
+                    <div className="font-bold text-purple-900 dark:text-purple-300">1. Exams &amp; Regular Sessions</div>
+                    <div className="text-[10px] text-purple-700 dark:text-purple-400">Strictly immune to preemption</div>
+                  </div>
+                  <span className="text-[10px] font-mono font-bold bg-purple-200 dark:bg-purple-900 px-1.5 py-0.5 rounded">P1–P9</span>
+                </div>
+                <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 flex items-center justify-between gap-2">
+                  <div>
+                    <div className="font-bold text-blue-900 dark:text-blue-300">2. Institute Events</div>
+                    <div className="text-[10px] text-blue-700 dark:text-blue-400">Tech Fest Inauguration, Convocation</div>
+                  </div>
+                  <span className="text-[10px] font-mono font-bold bg-blue-200 dark:bg-blue-900 px-1.5 py-0.5 rounded">Weight: 10</span>
+                </div>
+                <div className="p-2 rounded-xl bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 flex items-center justify-between gap-2">
+                  <div>
+                    <div className="font-bold text-teal-900 dark:text-teal-300">3. Distinguished Lectures</div>
+                    <div className="text-[10px] text-teal-700 dark:text-teal-400">ISRO, Industry Leaders</div>
+                  </div>
+                  <span className="text-[10px] font-mono font-bold bg-teal-200 dark:bg-teal-900 px-1.5 py-0.5 rounded">Weight: 8</span>
+                </div>
+                <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 flex items-center justify-between gap-2">
+                  <div>
+                    <div className="font-bold text-amber-900 dark:text-amber-300">4. Dept &amp; Club Events</div>
+                    <div className="text-[10px] text-amber-700 dark:text-amber-400">Competitions, Hackathons, Cultural</div>
+                  </div>
+                  <span className="text-[10px] font-mono font-bold bg-amber-200 dark:bg-amber-900 px-1.5 py-0.5 rounded">Weight: 2–5</span>
+                </div>
+              </div>
+              <div className="p-3 rounded-xl bg-[var(--bg)] border border-[var(--border)] text-[11px] text-[var(--muted)] space-y-1.5">
                 <div className="font-bold text-[var(--ink)]">CIT Governance Mandates:</div>
                 <p>• <strong>Curfew Limit:</strong> All student activities must terminate before Period 13 (22:00).</p>
                 <p>• <strong>Self-Approval Rule:</strong> Section 4 strictly prohibits any requester from approving their own event.</p>
                 <p>• <strong>Authority:</strong> Only Dean&apos;s Office or Department Coordinators hold approval authorization.</p>
               </div>
-            )}
-          </div>
-
-          {/* Quick Actions Panel */}
-          <div className="p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-xs space-y-3">
-            <h3 className="font-extrabold text-xs uppercase tracking-wider font-heading">
-              Quick Actions
-            </h3>
-
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => onNavigateTab && onNavigateTab("timetable")}
-                className="p-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg)] hover:border-blue-500 transition text-center flex flex-col items-center gap-1 text-[10px] font-bold"
-              >
-                <Calendar className="w-4 h-4 text-blue-600 mb-0.5" />
-                <span>View Timetable</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  setActiveStatus("alternative_offered");
-                }}
-                className="p-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg)] hover:border-blue-500 transition text-center flex flex-col items-center gap-1 text-[10px] font-bold"
-              >
-                <HelpCircle className="w-4 h-4 text-amber-600 mb-0.5" />
-                <span>Alternatives</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  // Filter to current user&apos;s requests
-                  setSearchQuery(currentUserName);
-                }}
-                className="p-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg)] hover:border-blue-500 transition text-center flex flex-col items-center gap-1 text-[10px] font-bold col-span-2"
-              >
-                <Users className="w-4 h-4 text-emerald-600 mb-0.5" />
-                <span>Filter My Bookings ({currentUserName})</span>
-              </button>
-            </div>
-          </div>
+            </section>
+          )}
         </aside>
       </div>
 

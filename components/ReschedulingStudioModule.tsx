@@ -3,274 +3,353 @@
 import React, { useState } from "react";
 import {
   ArrowLeftRight,
-  CheckCircle2,
   AlertTriangle,
-  Clock,
   Send,
-  Calendar,
-  Sparkles,
+  CalendarDays,
   ChevronDown,
+  ChevronRight,
+  ArrowRight,
+  Check,
+  Sparkles,
+  BookOpen,
+  X,
 } from "lucide-react";
 
-export default function ReschedulingStudioModule() {
+interface ReschedulingStudioModuleProps {
+  onNavigateTab?: (tab: string) => void;
+  userRole?: string;
+  isDark?: boolean;
+}
 
-  // Timetable records matching the exact comparison table from the showcase
-  const currentSchedule = [
-    { day: "Mon, 27 Oct", time: "09:00 – 10:00", subject: "Mathematics", faculty: "Dr. Sharma", room: "LH-1" },
-    { day: "Mon, 27 Oct", time: "10:00 – 11:00", subject: "Physics", faculty: "Dr. Verma", room: "LH-2" },
-    { day: "Mon, 27 Oct", time: "11:00 – 12:00", subject: "Chemistry", faculty: "Dr. Khan", room: "Lab-1" },
-    { day: "Tue, 28 Oct", time: "09:00 – 10:00", subject: "Computer Science", faculty: "Dr. Patel", room: "CS-201" },
-    { day: "Tue, 28 Oct", time: "10:00 – 11:00", subject: "Mathematics", faculty: "Dr. Sharma", room: "LH-1" },
-  ];
+interface Row {
+  day: string;
+  time: string;
+  subject: string;
+  faculty: string;
+  room: string;
+  changed?: boolean;
+}
 
-  const proposedSchedule = [
-    { day: "Mon, 27 Oct", time: "09:00 – 10:00", subject: "Mathematics", faculty: "Dr. Sharma", room: "LH-1", changed: false },
-    { day: "Mon, 27 Oct", time: "10:00 – 11:00", subject: "Chemistry", faculty: "Dr. Khan", room: "LH-2", changed: true },
-    { day: "Mon, 27 Oct", time: "11:00 – 12:00", subject: "Physics", faculty: "Dr. Verma", room: "Lab-2", changed: true },
-    { day: "Tue, 28 Oct", time: "09:00 – 10:00", subject: "Computer Science", faculty: "Dr. Patel", room: "CS-201", changed: false },
-    { day: "Tue, 28 Oct", time: "10:00 – 11:00", subject: "Mathematics", faculty: "Dr. Sharma", room: "LH-1", changed: false },
-  ];
+/** Illustrative sample rows from the design kit; not live schedule versions. */
+const CURRENT: Row[] = [
+  { day: "Mon, 27 Oct", time: "09:00 – 10:00", subject: "Mathematics", faculty: "Dr. Sharma", room: "LH-1" },
+  { day: "Mon, 27 Oct", time: "10:00 – 11:00", subject: "Physics", faculty: "Dr. Verma", room: "LH-2" },
+  { day: "Mon, 27 Oct", time: "11:00 – 12:00", subject: "Chemistry", faculty: "Dr. Khan", room: "Lab-1" },
+  { day: "Tue, 28 Oct", time: "09:00 – 10:00", subject: "Computer Science", faculty: "Dr. Patel", room: "CS-201" },
+  { day: "Tue, 28 Oct", time: "10:00 – 11:00", subject: "Mathematics", faculty: "Dr. Sharma", room: "LH-1" },
+];
+
+const PROPOSED: Row[] = [
+  { day: "Mon, 27 Oct", time: "09:00 – 10:00", subject: "Mathematics", faculty: "Dr. Sharma", room: "LH-1" },
+  { day: "Mon, 27 Oct", time: "10:00 – 11:00", subject: "Chemistry", faculty: "Dr. Khan", room: "LH-2", changed: true },
+  { day: "Mon, 27 Oct", time: "11:00 – 12:00", subject: "Physics", faculty: "Dr. Verma", room: "Lab-2", changed: true },
+  { day: "Tue, 28 Oct", time: "09:00 – 10:00", subject: "Computer Science", faculty: "Dr. Patel", room: "CS-201" },
+  { day: "Tue, 28 Oct", time: "10:00 – 11:00", subject: "Mathematics", faculty: "Dr. Sharma", room: "LH-1" },
+];
+
+const STEPS = [
+  { label: ["Request", "Submitted"], state: "done" },
+  { label: ["Coordinator", "Review"], state: "active" },
+  { label: ["Faculty", "Approval"], state: "todo" },
+  { label: ["Final", "Update"], state: "todo" },
+] as const;
+
+/* ------------------------------------------------------------------ */
+/* Shared bits                                                         */
+/* ------------------------------------------------------------------ */
+function TimetableTable({ rows, highlight }: { rows: Row[]; highlight: boolean }) {
+  return (
+    <>
+      {/* Desktop / tablet table */}
+      <div className="hidden sm:block overflow-x-auto rounded-xl">
+        <table className="w-full text-[12.5px] text-left">
+          <thead>
+            <tr className="font-bold" style={{ background: "var(--search-bg)" }}>
+              {["Day", "Time", "Subject", "Faculty", "Room"].map((h) => (
+                <th key={h} className="px-2.5 py-2.5 first:rounded-l-lg last:rounded-r-lg">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => {
+              const hl = highlight && r.changed;
+              return (
+                <tr
+                  key={i}
+                  className={`border-b last:border-b-0 transition-colors ${hl ? "" : "hover:bg-[var(--row-hover)]"}`}
+                  style={{
+                    borderColor: "var(--border)",
+                    background: hl ? "rgba(37,99,235,.09)" : undefined,
+                  }}
+                >
+                  <td className="px-2.5 py-2.5 font-medium whitespace-nowrap">{r.day}</td>
+                  <td className="px-2.5 py-2.5 whitespace-nowrap">{r.time}</td>
+                  <td className={`px-2.5 py-2.5 whitespace-nowrap font-semibold ${hl ? "text-blue-700 dark:text-sky-300" : ""}`}>
+                    {r.subject}
+                    {hl && <span className="sr-only"> (changed)</span>}
+                  </td>
+                  <td className="px-2.5 py-2.5 whitespace-nowrap">{r.faculty}</td>
+                  <td className={`px-2.5 py-2.5 font-semibold whitespace-nowrap ${hl ? "text-blue-700 dark:text-sky-300" : ""}`}>{r.room}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile list */}
+      <ul className="sm:hidden space-y-2">
+        {rows.map((r, i) => {
+          const hl = highlight && r.changed;
+          return (
+            <li
+              key={i}
+              className="flex items-center gap-3 rounded-xl border px-3 py-2.5"
+              style={{
+                borderColor: hl ? "#93B4F5" : "var(--border)",
+                background: hl ? "rgba(37,99,235,.09)" : "var(--surface)",
+              }}
+            >
+              <span className="w-10 h-10 rounded-full bg-[#E4EDFF] dark:bg-[#14264B] flex items-center justify-center shrink-0">
+                <BookOpen className="w-[18px] h-[18px] text-blue-600 dark:text-sky-300" strokeWidth={2} />
+              </span>
+              <span className="min-w-0 flex-1 leading-tight">
+                <span className="block text-[12px] font-bold">{r.day} · {r.time}</span>
+                <span className="block text-[13px] font-semibold truncate">
+                  {r.subject} <span className="text-[var(--muted)] font-medium">· {r.faculty} · {r.room}</span>
+                </span>
+                {hl && <span className="block text-[11px] font-bold text-blue-700 dark:text-sky-300 mt-0.5">Changed</span>}
+              </span>
+              <ChevronRight className="w-4 h-4 text-blue-600 dark:text-sky-400 shrink-0" />
+            </li>
+          );
+        })}
+      </ul>
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Module                                                              */
+/* ------------------------------------------------------------------ */
+export default function ReschedulingStudioModule({ isDark = false }: ReschedulingStudioModuleProps) {
+  const [week, setWeek] = useState("This Week");
+  const [compare, setCompare] = useState(true);
+  const [details, setDetails] = useState(false);
+  const [notice, setNotice] = useState("");
+
+  const panel = "rounded-[20px] border bg-[var(--surface)]";
+  const panelStyle: React.CSSProperties = {
+    borderColor: isDark ? "#1B4F9C" : "var(--border)",
+    boxShadow: isDark ? "0 0 0 1px rgba(30,100,220,.18), 0 10px 30px rgba(0,60,200,.15)" : "var(--shadow-card)",
+  };
 
   return (
-    <div className="space-y-6">
-      <p className="text-xs text-[var(--muted)]" role="note">Prototype preview · both timetable columns contain illustrative sample rows and are not live schedule versions.</p>
-      {/* 1. WIDESCREEN HERO BANNER */}
-      <section className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#0C1E4E] via-[#10308A] to-[#1E57D8] text-white p-6 sm:p-9 shadow-card flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-        <div className="relative z-10 max-w-xl">
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-serif-heading font-bold tracking-tight mb-2">
+    <div className="space-y-5 sm:space-y-6">
+      {/* HERO */}
+      <section
+        className="relative overflow-hidden rounded-[22px] text-white min-h-[210px] md:min-h-[150px] lg:min-h-[158px] flex items-start md:items-center"
+        style={{
+          background: isDark
+            ? "linear-gradient(100deg,#030B1F 0%,#07153A 45%,#0B1F58 100%)"
+            : "linear-gradient(100deg,#0A2570 0%,#123C9C 38%,#2160CF 64%,#4B93EE 100%)",
+          boxShadow: isDark
+            ? "0 0 0 1px rgba(56,130,255,.55), 0 14px 40px rgba(0,60,200,.28)"
+            : "0 14px 40px rgba(18,58,130,.28)",
+        }}
+      >
+        <div
+          className="hero-img absolute bottom-0 right-0 h-[42%] w-full md:h-full md:w-[62%] bg-cover bg-[position:72%_100%] md:bg-[position:center_62%]"
+          style={{ backgroundImage: `url(/images/hero-campus-${isDark ? "dark" : "light"}.jpg)` }}
+          role="img"
+          aria-label="CIT campus"
+        />
+        <div className="relative z-10 px-5 pt-5 pb-4 sm:px-8 md:py-0 max-w-[600px]">
+          <h1 className="font-serif-heading font-bold tracking-tight text-[28px] sm:text-[38px] leading-[1.05]">
             Rescheduling Studio
           </h1>
-          <p className="text-sm font-semibold text-blue-200 mb-4">
+          <p className="mt-2 text-[13px] sm:text-[15px] font-medium text-white/95 leading-snug">
             Compare Timetables. Get Approvals. Keep Campus in Sync.
           </p>
           <button
-            type="button"
-            disabled
-            title="Rescheduling solver workflow is not connected"
-            className="px-5 py-2.5 rounded-full bg-blue-600/70 text-white text-xs font-bold cursor-not-allowed flex items-center gap-2 opacity-80"
+            onClick={() => document.getElementById("resched-workspace")?.scrollIntoView({ behavior: "smooth" })}
+            className="mt-3.5 inline-flex items-center gap-2 h-9 px-5 rounded-full text-[13px] font-bold text-white border border-sky-300/70 bg-[#0B2A78]/80 hover:bg-[#12389A] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+            style={{ boxShadow: "0 0 16px rgba(80,160,255,.45)" }}
           >
-            Rescheduling preview only
-            <Sparkles className="w-3.5 h-3.5" />
+            Start Rescheduling <ArrowRight className="w-4 h-4" strokeWidth={2.5} />
           </button>
         </div>
-
-        {/* Right Neon Handwritten Callout ("Smart Planning!") */}
-        <div className="relative z-10 text-right hidden sm:block">
-          <div className="text-3xl lg:text-4xl font-extrabold italic font-serif-heading text-white drop-shadow-[0_2px_12px_rgba(37,99,235,0.7)] tracking-wide">
+        <div className="hidden lg:block absolute right-10 top-1/2 -translate-y-1/2 -rotate-6 text-right z-10 pointer-events-none">
+          <div className="font-serif-heading italic font-semibold text-[30px] leading-[1.02] [text-shadow:0_2px_10px_rgba(0,15,70,.95)]">
             Smart
             <br />
             Planning!
           </div>
-          <div className="h-1 w-24 bg-gradient-to-r from-amber-400 to-yellow-300 rounded-full ml-auto mt-2" />
+          <svg viewBox="0 0 150 10" className="ml-auto mt-1 w-28 h-2.5" aria-hidden="true">
+            <path d="M3 7C40 2 100 2 147 5" stroke="#F5B731" strokeWidth="2.8" strokeLinecap="round" fill="none" />
+          </svg>
         </div>
-
-        {/* Ambient lighting */}
-        <div className="absolute right-0 bottom-0 w-96 h-56 bg-gradient-to-t from-blue-400/20 to-indigo-400/15 rounded-full blur-3xl pointer-events-none" />
       </section>
 
-      {/* 2. SIDE-BY-SIDE TIMETABLE COMPARISON WORKSPACE */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] items-center gap-4">
-        {/* Left: Current Timetable */}
-        <div className="p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-sm space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-blue-600" />
-              <h3 className="font-extrabold text-xs uppercase tracking-wider font-heading">
-                Current Timetable
-              </h3>
-            </div>
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-300 text-[10px] font-bold border border-blue-200 dark:border-blue-900">
-              <span>This Week</span>
-              <ChevronDown className="w-3 h-3" />
-            </div>
-          </div>
+      <p className="text-[11.5px] text-[var(--muted)] font-medium -mb-2" role="note">
+        Prototype preview · both timetables contain illustrative sample rows and are not live schedule versions.
+      </p>
 
-          <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
-            <table className="w-full text-xs text-left">
-              <thead className="bg-[var(--brand-50)] dark:bg-slate-800 text-[var(--muted)] font-bold border-b border-[var(--border)]">
-                <tr>
-                  <th className="p-2.5">Day</th>
-                  <th className="p-2.5">Time</th>
-                  <th className="p-2.5">Subject</th>
-                  <th className="p-2.5">Faculty</th>
-                  <th className="p-2.5">Room</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border)]">
-                {currentSchedule.map((row, i) => (
-                  <tr key={i} className="hover:bg-blue-50/20 dark:hover:bg-slate-800/20">
-                    <td className="p-2.5 font-bold whitespace-nowrap">{row.day}</td>
-                    <td className="p-2.5 text-[var(--muted)] whitespace-nowrap">{row.time}</td>
-                    <td className="p-2.5 font-extrabold text-[var(--ink)]">{row.subject}</td>
-                    <td className="p-2.5 text-[var(--muted)]">{row.faculty}</td>
-                    <td className="p-2.5 font-bold text-blue-600">{row.room}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Center: Glowing Swap Connector Button */}
-        <div className="flex justify-center my-2 lg:my-0">
-          <span className="p-3.5 rounded-full bg-slate-300 text-slate-600" title="Comparison preview only" aria-label="Comparison preview only">
-            <ArrowLeftRight className="w-5 h-5" />
-          </span>
-        </div>
-
-        {/* Right: Proposed Timetable (with Highlighted Changes) */}
-        <div className="p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-sm space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <ArrowLeftRight className="w-4 h-4 text-emerald-600" />
-              <h3 className="font-extrabold text-xs uppercase tracking-wider font-heading">
-                Proposed Timetable
-              </h3>
-            </div>
-            <span className="px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-300 text-[10px] font-bold border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
-              Optimized →
-            </span>
-          </div>
-
-          <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
-            <table className="w-full text-xs text-left">
-              <thead className="bg-[var(--brand-50)] dark:bg-slate-800 text-[var(--muted)] font-bold border-b border-[var(--border)]">
-                <tr>
-                  <th className="p-2.5">Day</th>
-                  <th className="p-2.5">Time</th>
-                  <th className="p-2.5">Subject</th>
-                  <th className="p-2.5">Faculty</th>
-                  <th className="p-2.5">Room</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border)]">
-                {proposedSchedule.map((row, i) => (
-                  <tr
-                    key={i}
-                    className={`transition ${
-                      row.changed
-                        ? "bg-blue-50/70 dark:bg-blue-950/50"
-                        : "hover:bg-blue-50/20 dark:hover:bg-slate-800/20"
-                    }`}
-                  >
-                    <td className="p-2.5 font-bold whitespace-nowrap">{row.day}</td>
-                    <td className="p-2.5 text-[var(--muted)] whitespace-nowrap">{row.time}</td>
-                    <td
-                      className={`p-2.5 font-extrabold ${
-                        row.changed ? "text-blue-700 dark:text-blue-300 underline" : ""
-                      }`}
-                    >
-                      {row.subject}
-                    </td>
-                    <td className="p-2.5 text-[var(--muted)]">{row.faculty}</td>
-                    <td
-                      className={`p-2.5 font-bold ${
-                        row.changed ? "text-emerald-600 dark:text-emerald-400" : "text-blue-600"
-                      }`}
-                    >
-                      {row.room}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. LOWER ROW: CONFLICT ALERT, APPROVAL WORKFLOW, & SUBMIT ACTION */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch">
-        {/* Card 1: Conflict Alert */}
-        <div className="p-4 rounded-2xl bg-gradient-to-br from-rose-50 to-red-100/60 dark:from-rose-950/40 dark:to-red-950/20 border border-rose-200 dark:border-rose-900/60 shadow-sm flex flex-col justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-rose-700 dark:text-rose-400 font-bold text-xs mb-1">
-              <AlertTriangle className="w-4 h-4 shrink-0" />
-              <span>Conflict Alert</span>
-            </div>
-            <div className="text-sm font-black text-rose-900 dark:text-rose-200 mt-1">
-              1 Conflict Detected
-            </div>
-            <p className="text-[11px] text-rose-800 dark:text-rose-300 mt-0.5">
-              Physics & Lab-1 are occupied at the same time.
-            </p>
-          </div>
-          <p className="mt-3 text-[11px] text-rose-700 dark:text-rose-300">
-            Live conflict details are unavailable: this panel is illustrative sample data and no solver result is attached.
-          </p>
-        </div>
-
-        {/* Card 2: Approval Workflow Stepper */}
-        <div className="p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-sm flex flex-col justify-between">
-          <div className="text-xs font-extrabold font-heading uppercase tracking-wider text-[var(--muted)] mb-3">
-            Approval Workflow
-          </div>
-
-          <div className="flex items-center justify-between relative px-2">
-            <div className="absolute left-6 right-6 top-3.5 h-0.5 bg-[var(--border)] -z-0" />
-
-            {/* Step 1 */}
-            <div className="flex flex-col items-center text-center z-10">
-              <div className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shadow-xs">
-                ✓
-              </div>
-              <span className="text-[10px] font-bold text-[var(--ink)] mt-1.5 leading-tight">
-                Request<br />Submitted
-              </span>
-            </div>
-
-            {/* Step 2 */}
-            <div className="flex flex-col items-center text-center z-10">
-              <div className="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold ring-4 ring-blue-500/20 shadow-xs">
-                2
-              </div>
-              <span className="text-[10px] font-bold text-blue-600 mt-1.5 leading-tight">
-                Coordinator<br />Review
-              </span>
-            </div>
-
-            {/* Step 3 */}
-            <div className="flex flex-col items-center text-center z-10">
-              <div className="w-7 h-7 rounded-full bg-[var(--bg)] border border-[var(--border)] text-[var(--muted)] flex items-center justify-center text-xs font-bold">
-                3
-              </div>
-              <span className="text-[10px] font-bold text-[var(--muted)] mt-1.5 leading-tight">
-                Faculty<br />Approval
-              </span>
-            </div>
-
-            {/* Step 4 */}
-            <div className="flex flex-col items-center text-center z-10">
-              <div className="w-7 h-7 rounded-full bg-[var(--bg)] border border-[var(--border)] text-[var(--muted)] flex items-center justify-center text-xs font-bold">
-                4
-              </div>
-              <span className="text-[10px] font-bold text-[var(--muted)] mt-1.5 leading-tight">
-                Final<br />Update
-              </span>
+      {/* COMPARISON WORKSPACE */}
+      <div id="resched-workspace" className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] items-start gap-4 scroll-mt-4">
+        <section className={`${panel} p-4 sm:p-5`} style={panelStyle} aria-labelledby="cur-h">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <h2 id="cur-h" className="flex items-center gap-2.5 font-heading font-extrabold text-[17px]">
+              <CalendarDays className="w-5 h-5 text-blue-600 dark:text-sky-400" strokeWidth={2.2} />
+              Current Timetable
+            </h2>
+            <div className="relative">
+              <select
+                value={week}
+                onChange={(e) => setWeek(e.target.value)}
+                aria-label="Select week"
+                className="appearance-none h-8 pl-3.5 pr-7 rounded-full text-[12px] font-bold border focus:outline-none cursor-pointer text-blue-700 dark:text-sky-300"
+                style={{ background: "var(--search-bg)", borderColor: "var(--search-border)" }}
+              >
+                <option>This Week</option>
+                <option>Next Week</option>
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-blue-700 dark:text-sky-300" />
             </div>
           </div>
-        </div>
+          <TimetableTable rows={CURRENT} highlight={false} />
+        </section>
 
-        {/* Card 3: Submit for Approval Action */}
-        <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-700 to-blue-600 text-white shadow-card flex flex-col justify-between">
-          <div>
-            <div className="flex items-center gap-2 mb-1.5">
-              <Send className="w-4 h-4" />
-              <h4 className="font-extrabold text-sm">Submit for Approval</h4>
-            </div>
-            <p className="text-[11px] text-blue-100 leading-relaxed">
-              This sample proposal has not been validated or submitted. The approval workflow is not connected to a backend yet.
-            </p>
-          </div>
-
+        {/* Swap / compare connector */}
+        <div className="flex lg:self-center justify-center">
           <button
-            type="button"
-            disabled
-            title="Rescheduling submission API is not connected"
-            className="mt-4 w-full py-2.5 rounded-xl bg-white/70 text-blue-700 text-xs font-extrabold cursor-not-allowed opacity-80"
+            onClick={() => setCompare((c) => !c)}
+            aria-pressed={compare}
+            aria-label={compare ? "Hide changed rows" : "Compare changes"}
+            title={compare ? "Hide highlighted changes" : "Compare changes"}
+            className="w-14 h-14 rounded-full flex items-center justify-center text-white transition hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
+            style={{
+              background: "linear-gradient(135deg,#155BFF,#2F7BF5)",
+              boxShadow: compare ? "0 0 0 6px rgba(47,123,245,.18), 0 10px 26px rgba(21,91,255,.45)" : "0 8px 20px rgba(21,91,255,.3)",
+            }}
           >
-            Submission unavailable in demo
+            <ArrowLeftRight className="w-6 h-6" strokeWidth={2.4} />
           </button>
         </div>
+
+        <section className={`${panel} p-4 sm:p-5`} style={panelStyle} aria-labelledby="prop-h">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <h2 id="prop-h" className="flex items-center gap-2.5 font-heading font-extrabold text-[17px]">
+              <ArrowLeftRight className="w-5 h-5 text-blue-600 dark:text-sky-400" strokeWidth={2.2} />
+              Proposed Timetable
+            </h2>
+            <span className="inline-flex items-center gap-1 h-8 px-3.5 rounded-full text-[12px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800">
+              Optimized <ArrowRight className="w-3 h-3" strokeWidth={2.6} />
+            </span>
+          </div>
+          <TimetableTable rows={PROPOSED} highlight={compare} />
+        </section>
+      </div>
+
+      {/* LOWER ROW */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1.05fr_1.25fr_1fr] gap-4 sm:gap-5 items-stretch">
+        {/* Conflict alert */}
+        <section
+          className="relative overflow-hidden rounded-[20px] border p-4 sm:p-5 flex flex-col"
+          style={{
+            background: isDark ? "linear-gradient(135deg,#3A1226 0%,#1B1238 100%)" : "linear-gradient(135deg,#FFE5EA 0%,#FFF2F4 100%)",
+            borderColor: isDark ? "#7A2646" : "#FBC8D2",
+            boxShadow: isDark ? "0 0 22px rgba(220,50,90,.18)" : "var(--shadow-card)",
+          }}
+          aria-labelledby="ca-h"
+        >
+          <h2 id="ca-h" className="flex items-center gap-2 font-heading font-extrabold text-[15px]">
+            <AlertTriangle className="w-5 h-5 text-red-500 fill-red-500/15" strokeWidth={2.3} />
+            Conflict Alert
+          </h2>
+          <div className="mt-2 font-heading font-extrabold text-[22px] text-red-600 dark:text-rose-300 leading-tight">
+            1 Conflict Detected
+          </div>
+          <p className="mt-1 text-[12px] font-medium max-w-[230px]">Physics &amp; Lab-1 are occupied at the same time.</p>
+          <AlertTriangle className="absolute right-4 top-1/2 -translate-y-1/2 w-16 h-16 text-red-500/80" strokeWidth={1.6} aria-hidden="true" />
+          <button
+            onClick={() => setDetails((d) => !d)}
+            aria-expanded={details}
+            className="mt-auto self-start translate-y-0 pt-3"
+          >
+            <span className="inline-flex items-center gap-1.5 h-8 px-4 rounded-full text-[12px] font-bold border bg-[var(--surface)] text-blue-700 dark:text-sky-300 hover:bg-[var(--row-hover)] transition" style={{ borderColor: "var(--search-border)" }}>
+              {details ? "Hide Details" : "View Details"} <ArrowRight className="w-3.5 h-3.5" strokeWidth={2.6} />
+            </span>
+          </button>
+          {details && (
+            <dl className="mt-3 rounded-xl border p-3 text-[12px] space-y-1.5 bg-[var(--surface)]" style={{ borderColor: "var(--border)" }}>
+              <div><dt className="inline font-bold">Type: </dt><dd className="inline">Room overlap</dd></div>
+              <div><dt className="inline font-bold">When: </dt><dd className="inline">Mon, 27 Oct · 11:00 – 12:00</dd></div>
+              <div><dt className="inline font-bold">Why invalid: </dt><dd className="inline">Lab-1 can host only one session at a time.</dd></div>
+              <div><dt className="inline font-bold">Suggested: </dt><dd className="inline">Use Lab-2, which is free in this slot.</dd></div>
+              <p className="text-[11px] text-[var(--muted)]">Sample data. No solver result is attached to this preview.</p>
+            </dl>
+          )}
+        </section>
+
+        {/* Approval workflow */}
+        <section className={`${panel} p-4 sm:p-5`} style={panelStyle} aria-labelledby="aw-h">
+          <h2 id="aw-h" className="font-heading font-extrabold text-[15px] mb-4">Approval Workflow</h2>
+          <ol className="relative grid grid-cols-4 text-center">
+            <div className="absolute left-[12.5%] right-[12.5%] top-[14px] h-0.5 bg-[var(--border)]" aria-hidden="true" />
+            <div className="absolute left-[12.5%] w-[25%] top-[14px] h-0.5 bg-emerald-500" aria-hidden="true" />
+            {STEPS.map((s, i) => (
+              <li key={i} className="relative flex flex-col items-center">
+                <span
+                  className={`relative w-7 h-7 rounded-full flex items-center justify-center text-[12px] font-bold ${
+                    s.state === "done"
+                      ? "bg-emerald-500 text-white"
+                      : s.state === "active"
+                      ? "bg-blue-600 text-white ring-4 ring-blue-500/25"
+                      : "bg-[var(--surface)] border text-[var(--muted)]"
+                  }`}
+                  style={s.state === "todo" ? { borderColor: "var(--border)" } : undefined}
+                >
+                  {s.state === "done" ? <Check className="w-4 h-4" strokeWidth={3} /> : i + 1}
+                </span>
+                <span className={`mt-2 text-[11.5px] font-bold leading-tight ${s.state === "todo" ? "text-[var(--muted)]" : ""}`}>
+                  {s.label[0]}
+                  <br />
+                  {s.label[1]}
+                </span>
+                <span className="sr-only">{s.state === "done" ? "completed" : s.state === "active" ? "current step" : "upcoming"}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        {/* Submit */}
+        <section
+          className="relative overflow-hidden rounded-[20px] p-4 sm:p-5 text-white flex flex-col justify-center min-h-[128px]"
+          style={{
+            background: "linear-gradient(120deg,#1747D6 0%,#2563EB 55%,#3B82F6 100%)",
+            boxShadow: isDark ? "0 0 0 1px rgba(80,150,255,.5), 0 12px 30px rgba(0,60,200,.3)" : "0 14px 30px rgba(21,91,255,.32)",
+          }}
+        >
+          <Send className="absolute left-3 top-1/2 -translate-y-1/2 w-16 h-16 text-white/30" strokeWidth={1.4} aria-hidden="true" />
+          <div className="relative pl-[72px]">
+            <button
+              onClick={() => setNotice("Submission isn't connected in this prototype. Nothing was sent.")}
+              className="flex items-center gap-2 font-heading font-extrabold text-[17px] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70 rounded"
+            >
+              Submit for Approval <ArrowRight className="w-4 h-4" strokeWidth={2.6} />
+            </button>
+            <p className="mt-1.5 text-[12px] text-white/90 leading-snug max-w-[220px]">
+              Your changes will be reviewed by the coordinator.
+            </p>
+          </div>
+          {notice && (
+            <p role="status" className="relative mt-3 rounded-lg bg-white/15 px-3 py-2 text-[11.5px] font-semibold flex items-start justify-between gap-2">
+              <span>{notice}</span>
+              <button onClick={() => setNotice("")} aria-label="Dismiss" className="shrink-0"><X className="w-3.5 h-3.5" /></button>
+            </p>
+          )}
+        </section>
       </div>
     </div>
   );
