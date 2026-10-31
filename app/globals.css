@@ -1,27 +1,97 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+  --bg: #F5F8FF;
+  --surface: #FFFFFF;
+  --border: #DFE7F5;
+  --ink: #15213B;
+  --muted: #64748B;
+  --brand-950: #102A63;
+  --brand-900: #123A82;
+  --brand-800: #1747A6;
+  --brand-700: #1D4ED8;
+  --brand-600: #2563EB;
+  --brand-500: #3B82F6;
+  --brand-100: #DBEAFE;
+  --brand-50: #EFF6FF;
+  --success: #16A34A;
+  --warning: #D97706;
+  --danger: #DC2626;
+
+  /* Course Pill Colors (Light) */
+  --course-blue: #DBEAFE;
+  --course-violet: #EDE9FE;
+  --course-green: #DCFCE7;
+  --course-amber: #FFEDD5;
+  --course-rose: #FFE4E6;
+  --course-cyan: #CCFBF1;
+  
+  --shadow-card: 0 8px 28px rgba(25, 55, 115, 0.08);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #080F1F;
+  --surface: #111C31;
+  --border: #243450;
+  --ink: #F1F5FF;
+  --muted: #A6B4CC;
+  --brand-950: #070F22;
+  --brand-900: #0B1730;
+  --brand-800: #102448;
+  --brand-700: #2456B8;
+  --brand-600: #3B82F6;
+  --brand-500: #60A5FA;
+  --brand-100: #1E3A68;
+  --brand-50: #14233D;
+  --success: #4ADE80;
+  --warning: #FBBF24;
+  --danger: #FB7185;
+
+  /* Course Pill Colors (Dark) */
+  --course-blue: #16345D;
+  --course-violet: #302552;
+  --course-green: #153C35;
+  --course-amber: #49301D;
+  --course-rose: #482331;
+  --course-cyan: #134E4A;
+  
+  --shadow-card: 0 8px 28px rgba(0, 0, 0, 0.25);
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--bg);
+  color: var(--ink);
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  transition: background-color 0.25s ease, color 0.25s ease;
+  overflow-x: hidden;
 }
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
+h1, h2, h3, h4, .font-heading {
+  font-family: 'Manrope', sans-serif;
+}
+
+.font-serif-heading {
+  font-family: 'Fraunces', serif;
+}
+
+/* Custom Scrollbar for Timetable Grids */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
 }

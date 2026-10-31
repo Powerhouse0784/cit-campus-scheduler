@@ -1,101 +1,112 @@
-import Image from "next/image";
+"use client";
+
+import React, { useState } from "react";
+import Sidebar from "@/components/Sidebar";
+import TopNavbar from "@/components/TopNavbar";
+import HeroBanner from "@/components/HeroBanner";
+import TimetableSection from "@/components/TimetableSection";
+import VenueBookingSection from "@/components/VenueBookingSection";
+
+// Import the 6 showcase modules
+import SpectraEventsModule from "@/components/SpectraEventsModule";
+import ReschedulingStudioModule from "@/components/ReschedulingStudioModule";
+import ExamsModule from "@/components/ExamsModule";
+import AiAssistantModule from "@/components/AiAssistantModule";
+import AnalyticsConflictsModule from "@/components/AnalyticsConflictsModule";
+import SettingsRolesModule from "@/components/SettingsRolesModule";
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [activeTab, setActiveTab] = useState("dashboard");
+  const [role, setRole] = useState("admin");
+  const [isDark, setIsDark] = useState(false);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+  const toggleTheme = () => {
+    setIsDark(!isDark);
+    if (!isDark) {
+      document.documentElement.setAttribute("data-theme", "dark");
+    } else {
+      document.documentElement.removeAttribute("data-theme");
+    }
+  };
+
+  const handleResetData = () => {
+    alert("Reset completed: Timetable and demo states restored to clean baseline.");
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col md:flex-row bg-[var(--bg)] text-[var(--ink)]">
+      {/* Sidebar with Navigation Links */}
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        role={role}
+        setRole={setRole}
+        onReset={handleResetData}
+      />
+
+      {/* Main Content Area */}
+      <main className="flex-1 p-5 md:p-8 max-w-[1600px] mx-auto w-full space-y-6 overflow-y-auto">
+        <TopNavbar isDark={isDark} toggleTheme={toggleTheme} role={role} />
+
+        {/* Dashboard Overview */}
+        {activeTab === "dashboard" && (
+          <div className="space-y-6">
+            <HeroBanner
+              title="Good Morning, Ritik! 👋"
+              subtitle="Welcome to CIT Campus Scheduler · Smart Scheduling. A Better Campus."
+              eyebrow="Week 07 · Semester Overview"
+              badge="0 Hard Conflicts"
+              type="dashboard"
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
+            {/* Quick overview grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div onClick={() => setActiveTab("spectra")} className="cursor-pointer">
+                <SpectraEventsModule />
+              </div>
+              <div onClick={() => setActiveTab("changes")} className="cursor-pointer">
+                <ReschedulingStudioModule />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Individual Modules */}
+        {activeTab === "timetable" && (
+          <TimetableSection scheduleData={null} />
+        )}
+
+        {activeTab === "venues" && (
+          <VenueBookingSection />
+        )}
+
+        {activeTab === "spectra" && (
+          <SpectraEventsModule onNavigateTab={(tab) => setActiveTab(tab)} userRole={role} />
+        )}
+        {activeTab === "changes" && (
+          <ReschedulingStudioModule />
+        )}
+
+        {activeTab === "exams" && (
+          <ExamsModule />
+        )}
+
+        {activeTab === "ai" && (
+          <AiAssistantModule onNavigateTab={(tab) => setActiveTab(tab)} userRole={role} />
+        )}
+
+        {activeTab === "analytics" && (
+          <AnalyticsConflictsModule onNavigateTab={(tab) => setActiveTab(tab)} userRole={role} />
+        )}
+
+        {activeTab === "settings" && (
+          <SettingsRolesModule
+            onNavigateTab={(tab) => setActiveTab(tab)}
+            userRole={role}
+            isDark={isDark}
+            toggleTheme={toggleTheme}
+          />
+        )}
       </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
     </div>
   );
 }
