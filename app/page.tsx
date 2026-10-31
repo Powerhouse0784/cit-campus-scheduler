@@ -83,7 +83,7 @@ export default function Home() {
             />
           )}
 
-          {activeTab === "venues" && <VenueBookingSection />}
+          {activeTab === "venues" && <VenueBookingSection userRole={role} />}
 
           {activeTab === "spectra" && (
             <SpectraEventsModule

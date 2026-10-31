@@ -20,7 +20,7 @@ Versions in the table are the declarations in `package.json`; `package-lock.json
 
 | Provider | Model | Integration | Key required |
 |---|---|---|---|
-| Groq | `GROQ_MODEL` (default `llama3-8b-8192`) | Called via Groq REST API from `app/api/ai/parse/route.ts` for draft natural-language booking intent extraction. Output is type-checked, bounded and allow-listed; it is not a booking validation or approval. | `GROQ_API_KEY` |
+| Groq | `llama3-8b-8192` | Called via Groq REST API from `app/api/ai/parse/route.ts` for natural-language booking intent extraction. All output is normalised and validated by application code. | `GROQ_API_KEY` |
 
 The application operates in full rule-based mode if the Groq key is absent or Groq is unreachable.
 

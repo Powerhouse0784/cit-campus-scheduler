@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import type { DashboardStats, SchedulePreviewRow } from "@/lib/types";
 import {
   CalendarDays,
   CalendarClock,
@@ -13,6 +12,7 @@ import {
   Sparkles,
   AlertTriangle,
   LayoutGrid,
+  RefreshCw,
 } from "lucide-react";
 
 interface DashboardModuleProps {
@@ -45,9 +45,9 @@ function Sparkline({ color, variant, id, className = "" }: { color: string; vari
   );
 }
 
-export default function DashboardModule({ onNavigateTab, isDark = false }: DashboardModuleProps) {
+export default function DashboardModule({ onNavigateTab, userRole = "admin", isDark = false }: DashboardModuleProps) {
   const [greeting, setGreeting] = useState("Welcome back");
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [stats, setStats] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -201,7 +201,7 @@ export default function DashboardModule({ onNavigateTab, isDark = false }: Dashb
             {!isLoading && stats && (stats.previewRows || []).length === 0 && (
               <p role="status" className="py-5 text-sm text-[var(--muted)]">No schedule preview is available yet.</p>
             )}
-            {(stats?.previewRows || []).map((row: SchedulePreviewRow, i: number) => (
+            {(stats?.previewRows || []).map((row: any, i: number) => (
               <div
                 key={i}
                 className="grid grid-cols-[104px_1fr] sm:grid-cols-[170px_1fr] items-center py-3.5 border-t first:border-t-0 sm:first:border-t rounded-lg hover:bg-[var(--row-hover)] transition-colors"

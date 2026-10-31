@@ -25,8 +25,6 @@ interface AiAssistantModuleProps {
   isDark?: boolean;
 }
 
-interface ParsedWindow { day: string; from_period: number; to_period: number; }
-
 interface Msg {
   id: number;
   from: "bot" | "user";
@@ -165,7 +163,7 @@ export default function AiAssistantModule({ isDark = false }: AiAssistantModuleP
       const summary = [
         `Attendance: ${intent.attendance ?? "not detected"}`,
         `Duration: ${intent.duration_periods ?? "not detected"} period(s)`,
-        `Time window: ${((intent.windows as ParsedWindow[] | undefined) || []).map((w) => `${w.day} P${w.from_period}–P${w.to_period}`).join(", ") || "not detected"}`,
+        `Time window: ${(intent.windows || []).map((w: any) => `${w.day} P${w.from_period}–P${w.to_period}`).join(", ") || "not detected"}`,
         `Room types: ${(intent.room_types || []).join(", ") || "not specified"}`,
         `Facilities: ${(intent.needs || []).join(", ") || "none detected"}`,
       ];

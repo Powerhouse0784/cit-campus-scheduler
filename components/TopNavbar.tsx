@@ -17,10 +17,10 @@ interface TopNavbarProps {
 }
 
 const ROLE_OPTIONS = [
-  { value: "admin", label: "Admin (Dean's Office)" },
-  { value: "department_coordinator", label: "Dept. Coordinator (ECE)" },
-  { value: "faculty", label: "Faculty (Dr. Amit Behera)" },
-  { value: "club", label: "Club Rep (Dance Club)" },
+  { value: "admin", label: "Admin (Dean's Office)", credential: "admin@cit.edu" },
+  { value: "department_coordinator", label: "Dept. Coordinator (ECE)", credential: "coordinator@cit.edu" },
+  { value: "faculty", label: "Faculty (Dr. Amit Behera)", credential: "faculty@cit.edu" },
+  { value: "club", label: "Club Rep (Dance Club)", credential: "clubrep@cit.edu" },
 ];
 
 export default function TopNavbar({

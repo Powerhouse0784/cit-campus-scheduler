@@ -15,9 +15,7 @@ import {
   Zap,
   ArrowRight,
   Star,
-  type LucideIcon,
 } from "lucide-react";
-import type { Faculty, Room, StudentGroup, TimetableGrid, TimetableGridCell, UtilisationStats } from "@/lib/types";
 import HeroBanner from "@/components/HeroBanner";
 
 /* ------------------------------------------------------------------ */
@@ -93,18 +91,12 @@ interface TimetableSectionProps {
   onNavigateTab?: (tab: string) => void;
 }
 
-interface TimetableMetadata {
-  student_groups: StudentGroup[];
-  faculty: Faculty[];
-  rooms: Room[];
-}
-
 interface Placed {
   dayIndex: number;
   startPeriod: number;
   span: number;
   extra: number;
-  session: TimetableGridCell;
+  session: any;
 }
 
 /* ------------------------------------------------------------------ */
@@ -198,7 +190,7 @@ function CourseChip({
   ariaWhen,
   compact = false,
 }: {
-  s: TimetableGridCell;
+  s: any;
   extra: number;
   dimension: Dimension;
   dim: boolean;
@@ -289,7 +281,7 @@ function QuickInfo({
 }: {
   nextClass: { title: string; when: string } | null;
   midsemRange: string;
-  stats: UtilisationStats | null;
+  stats: any;
   onShowNext: () => void;
   onNavigateTab?: (tab: string) => void;
 }) {
@@ -420,9 +412,9 @@ function QuickInfo({
 export default function TimetableSection({ isDark = false, searchQuery = "", onNavigateTab }: TimetableSectionProps) {
   const [dimension, setDimension] = useState<Dimension>("group");
   const [entities, setEntities] = useState<Record<Dimension, string>>(DEFAULT_ENTITY);
-  const [metadata, setMetadata] = useState<TimetableMetadata>({ student_groups: [], faculty: [], rooms: [] });
-  const [grid, setGrid] = useState<TimetableGrid | null>(null);
-  const [stats, setStats] = useState<UtilisationStats | null>(null);
+  const [metadata, setMetadata] = useState<any>({ student_groups: [], faculty: [], rooms: [] });
+  const [grid, setGrid] = useState<any>(null);
+  const [stats, setStats] = useState<any>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -496,7 +488,7 @@ export default function TimetableSection({ isDark = false, searchQuery = "", onN
     if (!grid) return { placed, covered };
     DAYS.forEach((d, dayIndex) => {
       for (let p = 1; p <= 9; p++) {
-        const cell: TimetableGridCell[] = grid?.[d as keyof TimetableGrid]?.[p] || [];
+        const cell: any[] = grid?.[d]?.[p] || [];
         if (cell.length === 0) continue;
         const first = cell[0];
         if (first.start_period < p) continue; // continuation of a session drawn earlier
@@ -509,7 +501,7 @@ export default function TimetableSection({ isDark = false, searchQuery = "", onN
   }, [grid]);
 
   const q = searchQuery.trim().toLowerCase();
-  const matches = (s: TimetableGridCell) =>
+  const matches = (s: any) =>
     !q ||
     [s.course_title, s.course_id, s.room_id, s.room_name, s.faculty_name, ...(s.groups || [])]
       .filter(Boolean)
@@ -553,12 +545,12 @@ export default function TimetableSection({ isDark = false, searchQuery = "", onN
   /* Entity picker options */
   const options: { value: string; label: string }[] =
     dimension === "group"
-      ? metadata.student_groups.map((g) => ({ value: g.id, label: `${g.id} — ${g.name}` }))
+      ? (metadata.student_groups || []).map((g: any) => ({ value: g.id, label: `${g.id} — ${g.name}` }))
       : dimension === "faculty"
-      ? metadata.faculty.map((f) => ({ value: f.id, label: `${f.name} (${f.department})` }))
-      : metadata.rooms.map((r) => ({ value: r.id, label: `${r.id} — ${r.name}` }));
+      ? (metadata.faculty || []).map((f: any) => ({ value: f.id, label: `${f.name} (${f.department})` }))
+      : (metadata.rooms || []).map((r: any) => ({ value: r.id, label: `${r.id} — ${r.name}` }));
 
-  const dimButtons: { id: Dimension; label: string; short: string; Icon: LucideIcon }[] = [
+  const dimButtons: { id: Dimension; label: string; short: string; Icon: any }[] = [
     { id: "faculty", label: "By Faculty", short: "Faculty", Icon: UserRound },
     { id: "room", label: "By Room", short: "Room", Icon: DoorOpen },
     { id: "group", label: "By Group", short: "Group", Icon: Users },

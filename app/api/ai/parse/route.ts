@@ -10,15 +10,17 @@ import { apiError, readJsonBody } from "@/lib/api-response";
 const GROQ_SYSTEM_PROMPT = `You are a campus scheduling assistant for Chilika Institute of Technology.
 Extract booking intent from the user's message (which may be in English or Hinglish) and return ONLY a JSON object with these fields:
 {
+  "title": <string, e.g. "Coding Hackathon", "Technical Workshop", "Campus Quiz">,
+  "category": <"institute_event"|"guest_lecture"|"department_event"|"club_event">,
   "attendance": <number>,
   "duration_periods": <number, 1 period = 1 hour>,
   "day": <"MON"|"TUE"|"WED"|"THU"|"FRI">,
   "from_period": <1-13>,
   "room_types": <array of strings like "classroom","lecture_hall","seminar_hall","auditorium","lab_cs">,
   "needs": <array like "projector","pa_system","stage","computers","accessible">,
-  "requested_room": <room ID string or null>,
+  "requested_room": <room ID string or null, e.g. "AUD", "SH-1", "LH-1">,
   "mandatory_for_groups": <array of group IDs like "CSE-3">,
-  "follow_up": <string if info is missing, or null>,
+  "follow_up": <string if info is missing or defaulted, or null>,
   "accessibility_warning": <string if accessible room requested but non-accessible mentioned, or null>
 }
 Rules:
@@ -41,7 +43,7 @@ async function callGroq(prompt: string): Promise<Record<string, unknown> | null>
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: process.env.GROQ_MODEL || "llama3-8b-8192",
+        model: "llama3-8b-8192",
         messages: [
           { role: "system", content: GROQ_SYSTEM_PROMPT },
           { role: "user", content: prompt },
@@ -67,39 +69,43 @@ async function callGroq(prompt: string): Promise<Record<string, unknown> | null>
 }
 
 function normaliseGroqOutput(raw: Record<string, unknown>) {
-  const validDays = new Set(["MON", "TUE", "WED", "THU", "FRI"]);
-  const validNeeds = new Set(["projector", "pa_system", "stage", "computers", "accessible"]);
-  const validRoomTypes = new Set(["classroom", "lecture_hall", "seminar_hall", "auditorium", "lab_cs", "lab_elec"]);
-  const day = typeof raw.day === "string" && validDays.has(raw.day) ? raw.day : "THU";
-  const fromPeriod = Number.isInteger(raw.from_period) && Number(raw.from_period) >= 1 && Number(raw.from_period) <= 13
-    ? Number(raw.from_period) : 10;
-  const duration = Number.isInteger(raw.duration_periods) && Number(raw.duration_periods) >= 1 && Number(raw.duration_periods) <= 13
-    ? Number(raw.duration_periods) : 2;
-  const attendance = Number.isInteger(raw.attendance) && Number(raw.attendance) >= 1 && Number(raw.attendance) <= 10000
-    ? Number(raw.attendance) : 50;
-  const stringsFrom = (value: unknown, allowed?: Set<string>) => Array.isArray(value)
-    ? [...new Set(value.filter((entry): entry is string => typeof entry === "string" && entry.length <= 64 && (!allowed || allowed.has(entry))))].slice(0, 20)
-    : [];
+  // Normalise the LLM output into ParsedBookingIntent shape matching form fields
+  const title = typeof raw.title === "string" && raw.title.trim() ? raw.title.trim() : "Campus Event";
+  const category = (typeof raw.category === "string" && ["institute_event", "guest_lecture", "department_event", "club_event"].includes(raw.category))
+    ? raw.category
+    : "club_event";
+  const day = (typeof raw.day === "string" && ["MON", "TUE", "WED", "THU", "FRI"].includes(raw.day.toUpperCase()))
+    ? raw.day.toUpperCase()
+    : "THU";
+  const fromPeriod = typeof raw.from_period === "number" ? Math.max(1, Math.min(13, raw.from_period)) : 10;
+  const duration = typeof raw.duration_periods === "number" ? Math.max(1, Math.min(6, raw.duration_periods)) : 2;
+  const toPeriod = Math.min(13, fromPeriod + duration - 1);
+  const requestedRoom = typeof raw.requested_room === "string" ? raw.requested_room.trim().toUpperCase() : null;
 
   return {
-    attendance,
+    title,
+    category,
+    attendance: typeof raw.attendance === "number" ? raw.attendance : 50,
     duration_periods: duration,
-    windows: [{ day, from_period: fromPeriod, to_period: Math.min(13, fromPeriod + duration - 1) }],
-    needs: stringsFrom(raw.needs, validNeeds),
-    room_types: stringsFrom(raw.room_types, validRoomTypes).length
-      ? stringsFrom(raw.room_types, validRoomTypes)
+    day,
+    start_period: fromPeriod,
+    end_period: toPeriod,
+    windows: [{ day, from_period: fromPeriod, to_period: toPeriod }],
+    needs: Array.isArray(raw.needs) ? raw.needs : [],
+    room_types: Array.isArray(raw.room_types) && (raw.room_types as unknown[]).length > 0
+      ? raw.room_types
       : ["classroom", "lecture_hall", "seminar_hall"],
-    requested_room: typeof raw.requested_room === "string" && raw.requested_room.length <= 32 ? raw.requested_room : null,
-    mandatory_for_groups: stringsFrom(raw.mandatory_for_groups),
-    follow_up: typeof raw.follow_up === "string" ? raw.follow_up.slice(0, 500) : null,
-    accessibility_warning: typeof raw.accessibility_warning === "string" ? raw.accessibility_warning.slice(0, 500) : null,
+    requested_room: requestedRoom,
+    mandatory_for_groups: Array.isArray(raw.mandatory_for_groups) ? raw.mandatory_for_groups : [],
+    follow_up: typeof raw.follow_up === "string" ? raw.follow_up : null,
+    accessibility_warning: typeof raw.accessibility_warning === "string" ? raw.accessibility_warning : null,
     _source: "groq",
   };
 }
 
 export async function POST(req: NextRequest) {
   const parsed = await readJsonBody<{ prompt?: unknown }>(req);
-  if (parsed.success === false) return parsed.response;
+  if (!parsed.success) return parsed.response;
 
   const prompt = parsed.data?.prompt;
   if (typeof prompt !== "string" || !prompt.trim()) {
@@ -122,7 +128,7 @@ export async function POST(req: NextRequest) {
     // 2. Fallback to deterministic rule-based parser
     const ruleResult = parseHinglishOrEnglishRequest(trimmedPrompt);
     return NextResponse.json({ ...ruleResult, _source: "rule_based", success: true });
-  } catch {
+  } catch (error) {
     // 3. Last resort: deterministic parser on any error
     try {
       const ruleResult = parseHinglishOrEnglishRequest(trimmedPrompt);

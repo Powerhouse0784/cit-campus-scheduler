@@ -160,8 +160,32 @@ export interface ScheduleOutput {
   };
   exams: ExamAssignment[];
 }
+
 export interface CITDataset {
   dataset_id: string;
+  institute?: string;
+  calendar?: {
+    days: Day[];
+    periods: Period[];
+    lunch?: {
+      after_period: number;
+      start: string;
+      end: string;
+    };
+    lab_start_periods?: number[];
+    event_only_periods?: number[];
+    fest_week?: string;
+    exam_week?: {
+      days: ExamDay[];
+      sessions: Array<{
+        id: ExamSession;
+        start: string;
+        end: string;
+        duration_hours: number;
+      }>;
+      dates?: Record<string, string>;
+    };
+  };
   rooms: Room[];
   faculty: Faculty[];
   student_groups: StudentGroup[];
@@ -171,75 +195,7 @@ export interface CITDataset {
   cancellations: Cancellation[];
   exams: Exam[];
   room_unavailability: RoomUnavailability[];
+  priority_order?: string[];
+  role_category_cap?: Record<string, Record<string, number>>;
+  [key: string]: any;
 }
-
-export interface ScheduledSession extends SessionAssignment {
-  duration?: number;
-}
-
-export interface TimetableGridCell {
-  session_id: string;
-  course_id: string;
-  course_title: string;
-  department: string;
-  kind: Session["kind"];
-  duration: number;
-  room_id: string;
-  room_name: string;
-  faculty_id: string;
-  faculty_name: string;
-  groups: string[];
-  size: number;
-  start_period: number;
-}
-
-export type TimetableGrid = Record<Day, Record<number, TimetableGridCell[]>>;
-
-export interface SchedulePreviewRow {
-  date: Day;
-  period: string;
-  title: string;
-  room: string;
-  color: string;
-  bar: string;
-}
-
-export interface DashboardStats {
-  sessionsCount: number;
-  roomsInUse: number;
-  roomsTotal: number;
-  capacityPercent: number;
-  pendingApprovals: number;
-  previewRows: SchedulePreviewRow[];
-}
-
-export interface UtilisationStats {
-  percent: number;
-  roomsUsed: number;
-  roomsTotal: number;
-  bookedHours: number;
-  availableHours: number;
-  sessionCount: number;
-}
-
-export interface SpectraBooking extends BookingDecision {
-  title: string;
-  requester: string;
-  role: UserRole;
-  category: string;
-  attendance: number;
-  raw_text: string;
-}
-
-export interface ExamWithMeta extends ExamAssignment {
-  size: number;
-  groups: string[];
-  course_ids: string[];
-  duration_hours: number;
-}
-
-export type DisruptionChange =
-  | { type: "room_unavailable"; room_id: string; days: Day[] }
-  | { type: "faculty_unavailable"; faculty_id: string; days: Day[] }
-  | { type: "add_session"; session: Session }
-  | { type: "remove_session"; session_id: string };

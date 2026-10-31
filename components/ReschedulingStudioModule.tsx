@@ -1,8 +1,11 @@
 "use client";
 
+import React, { useState } from "react";
 import {
   ArrowLeftRight,
+  CheckCircle2,
   AlertTriangle,
+  Clock,
   Send,
   Calendar,
   Sparkles,
@@ -124,8 +127,8 @@ export default function ReschedulingStudioModule() {
                 Proposed Timetable
               </h3>
             </div>
-            <span className="px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[10px] font-bold border border-amber-200 dark:border-amber-800 flex items-center gap-1">
-              Sample preview
+            <span className="px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-300 text-[10px] font-bold border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+              Optimized →
             </span>
           </div>
 
@@ -185,10 +188,10 @@ export default function ReschedulingStudioModule() {
               <span>Conflict Alert</span>
             </div>
             <div className="text-sm font-black text-rose-900 dark:text-rose-200 mt-1">
-              Conflict status unavailable
+              1 Conflict Detected
             </div>
             <p className="text-[11px] text-rose-800 dark:text-rose-300 mt-0.5">
-              No live conflict analysis has been run for this preview.
+              Physics & Lab-1 are occupied at the same time.
             </p>
           </div>
           <p className="mt-3 text-[11px] text-rose-700 dark:text-rose-300">

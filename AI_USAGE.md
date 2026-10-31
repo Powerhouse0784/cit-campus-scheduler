@@ -4,7 +4,7 @@
 
 ### 1. Natural-language booking parser (`lib/ai-parser.ts` + `app/api/ai/parse/route.ts`)
 - When `GROQ_API_KEY` is set, the POST endpoint calls the Groq API (`llama3-8b-8192`) to extract structured booking intent from English and Hinglish text.
-- The Groq response is post-processed in `normaliseGroqOutput()` with allow-lists, bounds and type checks before it is returned. The LLM output is treated as untrusted input.
+- The Groq response is **always post-processed and normalised by application code** in `normaliseGroqOutput()` before it is returned. The LLM output is treated as untrusted input.
 - If Groq is unavailable, times out (8-second limit), or the key is not set, the system **automatically falls back** to the deterministic rule-based parser in `lib/ai-parser.ts`. The manual booking form continues to work without any LLM.
 - The parser response field `_source` tells the caller whether the result came from `"groq"` or `"rule_based"` or `"rule_based_fallback"`.
 
@@ -39,5 +39,4 @@ AI coding assistants (including Antigravity / Gemini) were used to accelerate de
 ## Known limitations
 - The Groq parser may return incomplete JSON for highly ambiguous requests; the normalisation layer applies safe defaults.
 - Date/time interpretation uses period numbers (P1–P13), not calendar dates; users must confirm the parsed output.
-- The parser does not produce validated venue alternatives; it does not check room availability, timetable overlap, exam priority, or booking approval.
-- The current Groq model name is configurable through `GROQ_MODEL`; verify that the configured model remains available in the Groq account before deployment.
+- The parser does not produce validated venue alternatives; alternatives require deterministic engine checks.

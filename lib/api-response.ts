@@ -18,11 +18,12 @@ export function apiError(message: string, status = 400, details?: unknown) {
   );
 }
 
+export type JsonBodyResult<T> =
+  | { success: true; data: T; response?: never }
+  | { success: false; response: NextResponse; data?: never };
+
 /** Parse JSON safely and return a consistent 400 response for malformed bodies. */
-export async function readJsonBody<T = unknown>(request: Request): Promise<
-  | { success: true; data: T }
-  | { success: false; response: NextResponse }
-> {
+export async function readJsonBody<T = unknown>(request: Request): Promise<JsonBodyResult<T>> {
   try {
     return { success: true, data: (await request.json()) as T };
   } catch {
