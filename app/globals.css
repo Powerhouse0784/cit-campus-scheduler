@@ -174,7 +174,9 @@ h1, h2, h3, h4, .font-heading {
   .kpi-blue   { background: var(--kpi-blue-bg);   border-color: var(--kpi-blue-border); }
   .kpi-violet { background: var(--kpi-violet-bg); border-color: var(--kpi-violet-border); }
   .kpi-green  { background: var(--kpi-green-bg);  border-color: var(--kpi-green-border); }
+
   .kpi-rose   { background: var(--kpi-rose-bg);   border-color: var(--kpi-rose-border); }
+
   .kpi-amber  { background: var(--kpi-amber-bg);  border-color: var(--kpi-amber-border); }
 
   .qa-tile {

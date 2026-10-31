@@ -48,6 +48,7 @@ export default function Home() {
           setRole={setRole}
           onReset={handleResetData}
           activeTab={activeTab}
+
         />
 
         <main className="flex-1 px-4 sm:px-6 pb-28 md:pb-10 max-w-[1600px] w-full mx-auto space-y-6">
@@ -86,6 +87,7 @@ export default function Home() {
               onNavigateTab={(tab) => setActiveTab(tab)}
               userRole={role}
               isDark={isDark}
+
             />
           )}
 
