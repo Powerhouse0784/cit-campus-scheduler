@@ -10,6 +10,7 @@ interface TopNavbarProps {
   role: string;
   setRole: (role: string) => void;
   onReset: () => void;
+  activeTab?: string;
 }
 
 const ROLE_OPTIONS = [
@@ -19,7 +20,7 @@ const ROLE_OPTIONS = [
   { value: "club", label: "Club Rep (Dance Club)" },
 ];
 
-export default function TopNavbar({ isDark, toggleTheme, role, setRole, onReset }: TopNavbarProps) {
+export default function TopNavbar({ isDark, toggleTheme, role, setRole, onReset, activeTab }: TopNavbarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -66,7 +67,17 @@ export default function TopNavbar({ isDark, toggleTheme, role, setRole, onReset 
         <input
           type="text"
           aria-label="Search"
-          placeholder="Search anything... (e.g. room 101, CS Lab)"
+          placeholder={
+            activeTab === "settings"
+              ? "Search settings, users, or permissions..."
+              : activeTab === "analytics"
+              ? "Search analytics, rooms, or events..."
+              : activeTab === "exams"
+              ? "Search exams, subjects, or courses..."
+              : activeTab === "ai"
+              ? 'Search anything... (e.g. "Show Monday exams")'
+              : "Search anything... (e.g. room 101, CS Lab)"
+          }
           className="w-full h-12 pl-12 pr-5 rounded-full border text-[13.5px] font-medium text-[var(--ink)] placeholder:text-[var(--nav-ink)]/70 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
           style={{ background: "var(--search-bg)", borderColor: "var(--search-border)" }}
         />

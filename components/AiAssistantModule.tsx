@@ -1,457 +1,396 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Sparkles,
-  Send,
-  Calendar,
-  Search,
-  Clock,
-  RefreshCw,
-  AlertTriangle,
-  Lightbulb,
-  MessageSquare,
-  ArrowRight,
+  Zap,
   ShieldCheck,
-  CheckCircle2,
-  TrendingUp,
   Star,
-  Flame,
+  AlertTriangle,
+  CalendarDays,
+  Lightbulb,
+  MessageCircle,
+  ArrowRight,
+  Send,
+  Clock,
+  FileText,
+  Smile,
+  BarChart3,
+  Search,
+  type LucideIcon,
 } from "lucide-react";
 
 interface AiAssistantModuleProps {
   onNavigateTab?: (tab: string) => void;
   userRole?: string;
+  isDark?: boolean;
 }
 
-interface ChatMessage {
-  id: string;
-  sender: "bot" | "user";
+interface Msg {
+  id: number;
+  from: "bot" | "user";
   text: string;
+  items?: { title: string; meta: string; status?: "Validated" | "Needs review" }[];
   time: string;
-  structuredCard?: any;
 }
 
-export default function AiAssistantModule({
-  onNavigateTab,
-  userRole = "admin",
-}: AiAssistantModuleProps) {
-  const [inputMessage, setInputMessage] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: "m-0",
-      sender: "bot",
-      text: "Hello! 👋 I'm your CIT Timetable Assistant. How can I help you today?",
-      time: "2:30 PM",
-    },
-  ]);
+const PROMPTS: { text: string; Icon: LucideIcon }[] = [
+  { text: "Show my Monday timetable", Icon: CalendarDays },
+  { text: "Find free slots for Data Structures", Icon: Search },
+  { text: "Check for conflicts", Icon: ShieldCheck },
+  { text: "Suggest an alternative slot", Icon: Sparkles },
+];
 
-  const suggestedPrompts = [
-    { label: "Show my Monday timetable", icon: Calendar },
-    { label: "Find free slots for Data Structures", icon: Search },
-    { label: "Check for conflicts", icon: Clock },
-    { label: "Suggest an alternative slot", icon: RefreshCw },
-  ];
-
-  const handleSend = async (customPrompt?: string) => {
-    const promptText = (customPrompt || inputMessage).trim();
-    if (!promptText) return;
-
-    const userMsg: ChatMessage = {
-      id: `u-${Date.now()}`,
-      sender: "user",
-      text: promptText,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+/** Demo responder. Replace with your authenticated AI + rule-engine API. */
+function reply(q: string): Omit<Msg, "id" | "from" | "time"> {
+  const t = q.toLowerCase();
+  if (t.includes("conflict") || t.includes("clash"))
+    return {
+      text: "I found 1 possible room overlap. Review the affected classes and suggested alternatives before applying any change.",
+      items: [{ title: "Room Clash · Mon, 27 Oct", meta: "10:00 – 11:00 · LH-1 vs LH-2", status: "Needs review" }],
     };
+  if (t.includes("free") || t.includes("slot") && t.includes("data"))
+    return {
+      text: "I looked for available faculty, room and student-group slots. These options satisfy the current timetable rules.",
+      items: [
+        { title: "Tue · P3", meta: "Room 201 · Dr. Sharma free", status: "Validated" },
+        { title: "Wed · P2", meta: "Room 316 · Dr. Sharma free", status: "Validated" },
+        { title: "Thu · P5", meta: "Lab 2 · Dr. Sharma free", status: "Validated" },
+      ],
+    };
+  if (t.includes("alternative") || t.includes("suggest"))
+    return {
+      text: "I found 3 validated alternatives. Compare their room availability, faculty availability and student impact before submitting for approval. I won't change anything until you confirm.",
+      items: [
+        { title: "Option A · Tue P3", meta: "Room 201 · 0 student clashes", status: "Validated" },
+        { title: "Option B · Wed P2", meta: "Room 316 · 0 student clashes", status: "Validated" },
+        { title: "Option C · Thu P5", meta: "Lab 2 · 1 minor overlap", status: "Needs review" },
+      ],
+    };
+  if (t.includes("monday") || t.includes("timetable") || t.includes("schedule"))
+    return {
+      text: "Here’s your Monday timetable. I found 4 scheduled classes. Would you like me to check for free periods?",
+      items: [
+        { title: "P1 · Math Lecture", meta: "Room 316" },
+        { title: "P2 · DSA Tutorial", meta: "Room 201" },
+        { title: "P4 · Physics Lab", meta: "Lab 1" },
+        { title: "P6 · Web Dev", meta: "Room 405" },
+      ],
+    };
+  return {
+    text: "I can help with your timetable, free slots and scheduling conflicts. Try “Show my Monday timetable” or “Check for conflicts”.",
+  };
+}
 
-    setMessages((prev) => [...prev, userMsg]);
-    setInputMessage("");
-    setIsLoading(true);
+const nowLabel = () => new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
-    try {
-      // Send to internal AI parser API
-      const res = await fetch("/api/ai/parse", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: promptText }),
-      });
+function BotAvatar({ size = 40 }: { size?: number }) {
+  return (
+    <span
+      className="rounded-full flex items-center justify-center shrink-0 border-2 border-[#9CC0FF]"
+      style={{ width: size, height: size, background: "linear-gradient(135deg,#E8F0FF,#BFD3FA)" }}
+      aria-hidden="true"
+    >
+      <svg viewBox="0 0 32 32" style={{ width: size * 0.7, height: size * 0.7 }}>
+        <rect x="3" y="7" width="26" height="19" rx="9" fill="#0B1E52" />
+        <circle cx="12" cy="16" r="2.6" fill="#35D6FF" />
+        <circle cx="20" cy="16" r="2.6" fill="#35D6FF" />
+        <path d="M13 21 Q16 23 19 21" stroke="#35D6FF" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+      </svg>
+    </span>
+  );
+}
 
-      const data = await res.json();
+/* ------------------------------------------------------------------ */
+/* Hero                                                                */
+/* ------------------------------------------------------------------ */
+function Hero({ isDark }: { isDark: boolean }) {
+  const chips = [
+    { label: "Smart Queries", Icon: Zap, tone: "#2F6BFF" },
+    { label: "Conflict Check", Icon: ShieldCheck, tone: "#10B981" },
+    { label: "Alternative Plans", Icon: Star, tone: "#F5B731" },
+  ];
+  return (
+    <section
+      className="relative overflow-hidden rounded-[22px] text-white min-h-[230px] md:min-h-[200px] lg:min-h-[208px] flex items-start md:items-center"
+      style={{
+        background: isDark
+          ? "linear-gradient(100deg,#030B24 0%,#0A1A5C 45%,#1B2FA8 100%)"
+          : "linear-gradient(100deg,#1236A8 0%,#2253D6 45%,#3C7CF2 100%)",
+        boxShadow: isDark ? "0 0 0 1px rgba(56,130,255,.55), 0 14px 40px rgba(0,60,200,.3)" : "0 14px 40px rgba(18,58,130,.28)",
+      }}
+    >
+      <div
+        className="hero-img absolute bottom-0 right-0 h-[40%] w-full md:h-full md:w-[60%] bg-cover bg-[position:72%_100%] md:bg-[position:center_62%]"
+        style={{ backgroundImage: `url(/images/hero-campus-${isDark ? "dark" : "light"}.jpg)` }}
+        role="img"
+        aria-label="CIT campus"
+      />
 
-      let botResponse = "";
-      if (promptText.toLowerCase().includes("monday")) {
-        botResponse =
-          "Here is your Monday schedule: 4 classes allocated (P1 Math, P2 DSA, P4 Physics Lab, P6 Web Dev). No clashes detected!";
-      } else if (promptText.toLowerCase().includes("conflict")) {
-        botResponse =
-          "Conflict scan complete: 0 hard clashes found across teaching sessions. All 189 slots pass official validator rules.";
-      } else if (promptText.toLowerCase().includes("free slots") || promptText.toLowerCase().includes("data structures")) {
-        botResponse =
-          "I checked room and faculty availability: LH-1 is open Tue P2 & Thu P4, while CS-LAB-1 is free Wednesday afternoon.";
-      } else {
-        botResponse =
-          "I analyzed your request and structured the parameters. Capacity, equipment, and accessibility have been verified against the CIT dataset.";
-      }
+      <div className="relative z-20 px-5 pt-5 pb-4 sm:px-8 md:py-0 max-w-full sm:max-w-[520px]">
+        <h1 className="font-heading font-extrabold tracking-tight text-[22px] sm:text-[34px] leading-[1.08]">
+          Meet Your
+          <br />
+          <span className="text-[#7FD3FF]">AI</span> Timetable Copilot
+        </h1>
+        <p className="mt-2 text-[13px] sm:text-[15px] font-semibold text-white/95">Ask, Plan and Get the Perfect Schedule!</p>
+        <div className="mt-3.5 flex flex-wrap gap-2">
+          {chips.map((c) => (
+            <span
+              key={c.label}
+              className="inline-flex items-center gap-1.5 h-8 pl-1.5 pr-3 rounded-full text-[11.5px] sm:text-[12.5px] font-bold border border-white/30 bg-[#0A1F66]/60 backdrop-blur-sm"
+            >
+              <span className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: c.tone }}>
+                <c.Icon className="w-3 h-3 text-white" strokeWidth={2.6} />
+              </span>
+              {c.label}
+            </span>
+          ))}
+        </div>
+      </div>
 
-      const botMsg: ChatMessage = {
-        id: `b-${Date.now()}`,
-        sender: "bot",
-        text: botResponse,
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        structuredCard: data,
-      };
+      <div className="hidden lg:block absolute right-8 top-1/2 -translate-y-1/2 -rotate-6 text-right z-20 pointer-events-none">
+        <div className="font-serif-heading italic font-semibold text-[28px] leading-[1.02] [text-shadow:0_2px_10px_rgba(0,15,70,.95)]">
+          Smart
+          <br />
+          Campus.
+          <br />
+          Smarter You!
+        </div>
+        <svg viewBox="0 0 150 10" className="ml-auto mt-1 w-32 h-2.5" aria-hidden="true">
+          <path d="M3 7C40 2 100 2 147 5" stroke="#F5B731" strokeWidth="2.8" strokeLinecap="round" fill="none" />
+        </svg>
+      </div>
+    </section>
+  );
+}
 
-      setMessages((prev) => [...prev, botMsg]);
-    } catch {
-      const fallbackMsg: ChatMessage = {
-        id: `b-${Date.now()}`,
-        sender: "bot",
-        text: "I reviewed your schedule against the rule engine. All hard constraints (H1 to H14) are satisfied with zero overlaps.",
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      };
-      setMessages((prev) => [...prev, fallbackMsg]);
-    } finally {
-      setIsLoading(false);
-    }
+/* ------------------------------------------------------------------ */
+/* Module                                                              */
+/* ------------------------------------------------------------------ */
+export default function AiAssistantModule({ isDark = false }: AiAssistantModuleProps) {
+  const [msgs, setMsgs] = useState<Msg[]>([
+    { id: 0, from: "bot", text: "Hello! 👋 I’m your CIT Timetable Assistant. How can I help you today?", time: "" },
+  ]);
+  const [input, setInput] = useState("");
+  const [thinking, setThinking] = useState(false);
+  const idRef = useRef(1);
+  const listRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setMsgs((m) => m.map((x) => (x.id === 0 ? { ...x, time: nowLabel() } : x)));
+  }, []);
+
+  useEffect(() => {
+    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
+  }, [msgs, thinking]);
+
+  const send = (value: string) => {
+    const q = value.trim();
+    if (!q || thinking) return;
+    setMsgs((m) => [...m, { id: idRef.current++, from: "user", text: q, time: nowLabel() }]);
+    setInput("");
+    setThinking(true);
+    setTimeout(() => {
+      setMsgs((m) => [...m, { id: idRef.current++, from: "bot", time: nowLabel(), ...reply(q) }]);
+      setThinking(false);
+    }, 800);
   };
 
+  const panel = "rounded-[20px] border bg-[var(--surface)]";
+  const panelStyle: React.CSSProperties = {
+    borderColor: isDark ? "#1B4F9C" : "var(--border)",
+    boxShadow: isDark ? "0 0 0 1px rgba(30,100,220,.18), 0 10px 30px rgba(0,60,200,.15)" : "var(--shadow-card)",
+  };
+
+  const actions: { label: string; sub: string; Icon: LucideIcon; cls: string; icon: string; run: () => void }[] = [
+    { label: "Check Conflicts", sub: "Scan for clashes", Icon: AlertTriangle, cls: "qa-rose", icon: "text-red-500", run: () => send("Check my timetable for conflicts") },
+    { label: "View Timetable", sub: "Your schedule", Icon: CalendarDays, cls: "qa-blue", icon: "text-blue-600 dark:text-blue-300", run: () => send("Show my Monday timetable") },
+    { label: "Get Suggestions", sub: "Smart options", Icon: Lightbulb, cls: "qa-green", icon: "text-emerald-600 dark:text-emerald-300", run: () => send("Suggest an alternative slot") },
+    { label: "Ask a Question", sub: "Get instant help", Icon: MessageCircle, cls: "qa-lilac", icon: "text-violet-600 dark:text-violet-300", run: () => inputRef.current?.focus() },
+  ];
+
+  const stats: { label: string; value: string; Icon: LucideIcon }[] = [
+    { label: "Total Queries", value: "2.4K", Icon: FileText },
+    { label: "Saved Time", value: "120 hrs", Icon: Clock },
+    { label: "Happy Students", value: "98%", Icon: Smile },
+  ];
+
   return (
-    <div className="space-y-6">
-      {/* 1. PANORAMIC COPILOT HERO BANNER */}
-      <section className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#071330] via-[#0E2872] to-[#1C51C6] text-white p-6 sm:p-9 shadow-card flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-        <div className="relative z-10 max-w-xl">
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-serif-heading font-bold tracking-tight mb-2">
-            Meet Your <span className="text-cyan-400">AI Timetable Copilot</span>
-          </h1>
-          <p className="text-sm sm:text-base font-semibold text-blue-200 mb-4">
-            Ask, Plan and Get the Perfect Schedule!
-          </p>
+    <div className="space-y-5 sm:space-y-6">
+      <Hero isDark={isDark} />
 
-          {/* 3 Capability Pills matching Mockup */}
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-500/20 border border-blue-400/30 text-xs font-bold text-cyan-300 backdrop-blur-md">
-              ⚡ Smart Queries
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_240px] gap-4 sm:gap-5 items-stretch">
+        {/* Chat */}
+        <section className={`${panel} p-4 sm:p-5 flex flex-col lg:col-span-1`} style={panelStyle} aria-labelledby="chat-h">
+          <h2 id="chat-h" className="flex items-center gap-2.5 font-heading font-extrabold text-[17px] mb-3">
+            <span className="w-8 h-8 rounded-full bg-violet-100 dark:bg-violet-900/50 flex items-center justify-center">
+              <Sparkles className="w-4 h-4 text-violet-600 dark:text-violet-300" strokeWidth={2.4} />
             </span>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-xs font-bold text-emerald-300 backdrop-blur-md">
-              🛡️ Conflict Check
-            </span>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/20 border border-amber-400/30 text-xs font-bold text-amber-300 backdrop-blur-md">
-              ⭐ Alternative Plans
-            </span>
-          </div>
-        </div>
+            Chat with AI Assistant
+          </h2>
 
-        {/* Center Mascot & Right Neon Script ("Smart Campus Smarter You!") */}
-        <div className="relative z-10 flex items-center gap-6">
-          {/* Friendly Mascot Representation */}
-          <div className="hidden sm:flex flex-col items-center">
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-cyan-400/20 to-blue-500/20 border border-cyan-400/40 p-2 flex items-center justify-center text-5xl shadow-[0_0_24px_rgba(33,182,255,0.35)] animate-pulse">
-              🤖
-            </div>
-            <span className="text-[10px] font-bold text-cyan-300 mt-1 uppercase tracking-wider">
-              CIT Copilot
-            </span>
-          </div>
-
-          {/* Right Neon Handwritten Script */}
-          <div className="text-right hidden lg:block">
-            <div className="text-3xl lg:text-4xl font-extrabold italic font-serif-heading text-white drop-shadow-[0_2px_12px_rgba(37,99,235,0.8)] tracking-wide">
-              Smart
-              <br />
-              Campus
-              <br />
-              Smarter You!
-            </div>
-            <div className="h-1 w-28 bg-gradient-to-r from-cyan-400 to-yellow-300 rounded-full ml-auto mt-2" />
-          </div>
-        </div>
-
-        {/* Glowing lighting effect */}
-        <div className="absolute right-0 bottom-0 w-96 h-56 bg-gradient-to-t from-cyan-500/20 to-blue-600/20 rounded-full blur-3xl pointer-events-none" />
-      </section>
-
-      {/* 2. THREE-COLUMN ASSISTANT WORKSPACE */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1.25fr_1fr_0.75fr] gap-4 items-stretch">
-        {/* COLUMN 1: Chat with AI Assistant */}
-        <div className="p-5 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-card flex flex-col justify-between space-y-4">
-          <div>
-            <div className="flex items-center gap-2 mb-3">
-              <span className="w-6 h-6 rounded-lg bg-blue-600 text-white flex items-center justify-center text-xs font-black shadow-xs">
-                ✦
-              </span>
-              <h2 className="font-extrabold text-sm font-heading">
-                Chat with AI Assistant
-              </h2>
-            </div>
-
-            {/* Conversation Flow */}
-            <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
-              {messages.map((m) => (
-                <div
-                  key={m.id}
-                  className={`flex flex-col ${
-                    m.sender === "user" ? "items-end" : "items-start"
-                  }`}
-                >
-                  <div className="flex items-start gap-2 max-w-[90%]">
-                    {m.sender === "bot" && (
-                      <div className="w-7 h-7 rounded-full bg-blue-600 text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
-                        🤖
-                      </div>
+          <div ref={listRef} className="space-y-3 max-h-[290px] min-h-[96px] overflow-y-auto pr-1" role="log" aria-live="polite">
+            {msgs.map((m) =>
+              m.from === "bot" ? (
+                <div key={m.id} className="flex items-start gap-3">
+                  <BotAvatar />
+                  <div className="rounded-2xl rounded-tl-md px-4 py-3 max-w-[88%] text-[13.5px] font-medium leading-snug" style={{ background: "var(--search-bg)" }}>
+                    {m.text}
+                    {m.items && (
+                      <ul className="mt-2.5 space-y-1.5">
+                        {m.items.map((it) => (
+                          <li key={it.title} className="flex items-center justify-between gap-3 rounded-xl bg-[var(--surface)] border px-3 py-2" style={{ borderColor: "var(--border)" }}>
+                            <div className="min-w-0">
+                              <div className="font-bold text-[12.5px] truncate">{it.title}</div>
+                              <div className="text-[11.5px] text-[var(--muted)]">{it.meta}</div>
+                            </div>
+                            {it.status && (
+                              <span className={`shrink-0 text-[10.5px] font-bold px-2 py-0.5 rounded-full ${it.status === "Validated" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300" : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"}`}>
+                                {it.status}
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
                     )}
-                    <div
-                      className={`p-3 rounded-2xl text-xs leading-relaxed ${
-                        m.sender === "user"
-                          ? "bg-blue-600 text-white rounded-br-none"
-                          : "bg-[var(--bg)] border border-[var(--border)] text-[var(--ink)] rounded-bl-none"
-                      }`}
-                    >
-                      <p>{m.text}</p>
-                      <span className="block text-[9px] opacity-60 mt-1 text-right">
-                        {m.time}
-                      </span>
-                    </div>
+                    <div className="text-right text-[10.5px] text-[var(--muted)] mt-1">{m.time}</div>
                   </div>
-
-                  {/* If structured card extracted from request */}
-                  {m.structuredCard && (
-                    <div className="mt-2 ml-9 p-3 rounded-xl bg-blue-50/60 dark:bg-slate-800/60 border border-blue-200 dark:border-blue-900 text-[11px] space-y-1.5 w-[85%]">
-                      <div className="flex items-center gap-1.5 font-bold text-blue-700 dark:text-blue-300">
-                        <ShieldCheck className="w-3.5 h-3.5" />
-                        <span>Rule Engine Guardrails Verified</span>
-                      </div>
-                      <div className="text-[10px] text-[var(--muted)] grid grid-cols-2 gap-1">
-                        <span>Attendance: {m.structuredCard.attendance || 50}</span>
-                        <span>Duration: {m.structuredCard.duration_periods || 2} hrs</span>
-                        <span>
-                          Target Room: {m.structuredCard.requested_room || "Valid Type"}
-                        </span>
-                        <span className="text-emerald-600 font-bold">0 Clashes</span>
-                      </div>
-                    </div>
-                  )}
                 </div>
-              ))}
-
-              {isLoading && (
-                <div className="flex items-center gap-2 text-xs text-[var(--muted)] ml-9">
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600" />
-                  <span>Checking CIT rules, faculty hours & venue constraints...</span>
+              ) : (
+                <div key={m.id} className="flex justify-end">
+                  <div className="rounded-2xl rounded-tr-md px-4 py-2.5 max-w-[80%] text-[13.5px] font-semibold text-white" style={{ background: "linear-gradient(110deg,#155BFF,#2F7BF5)" }}>
+                    {m.text}
+                    <div className="text-right text-[10.5px] text-white/70 mt-0.5">{m.time}</div>
+                  </div>
                 </div>
-              )}
-            </div>
-
-            {/* Suggested Prompts Pills (Matching Screenshot) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-3 border-t border-[var(--border)]">
-              {suggestedPrompts.map((p) => {
-                const Icon = p.icon;
-                return (
-                  <button
-                    key={p.label}
-                    onClick={() => handleSend(p.label)}
-                    className="p-2 px-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] hover:border-blue-500 hover:text-blue-600 transition text-left text-[11px] font-semibold text-[var(--muted)] flex items-center gap-2 truncate"
-                  >
-                    <Icon className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                    <span className="truncate">{p.label}</span>
-                  </button>
-                );
-              })}
-            </div>
+              )
+            )}
+            {thinking && (
+              <div className="flex items-center gap-3">
+                <BotAvatar />
+                <div className="rounded-2xl px-4 py-2.5 text-[12.5px] font-medium text-[var(--muted)]" style={{ background: "var(--search-bg)" }}>
+                  Checking timetable rules…
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Prompt Input Form */}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {PROMPTS.map((p) => (
+              <button
+                key={p.text}
+                onClick={() => send(p.text)}
+                className="inline-flex items-center gap-2 h-9 px-3.5 rounded-full border text-[12.5px] font-semibold transition hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
+                style={{ background: "var(--search-bg)", borderColor: "var(--search-border)" }}
+              >
+                <p.Icon className="w-4 h-4 text-blue-600 dark:text-sky-400" strokeWidth={2.1} />
+                {p.text}
+              </button>
+            ))}
+          </div>
+
           <form
+            className="mt-auto pt-4"
             onSubmit={(e) => {
               e.preventDefault();
-              handleSend();
+              send(input);
             }}
-            className="relative w-full pt-2"
           >
-            <div className="relative flex items-center">
-              <span className="absolute left-3.5 text-blue-600">✦</span>
+            <div className="flex items-center gap-2 h-12 pl-3 pr-1.5 rounded-full border" style={{ background: "var(--search-bg)", borderColor: "var(--search-border)" }}>
+              <Sparkles className="w-4 h-4 text-violet-500 shrink-0" />
               <input
-                type="text"
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                placeholder="Type your request in natural language..."
-                className="w-full pl-9 pr-12 py-3 rounded-full border border-[var(--border)] bg-[var(--bg)] text-xs text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-blue-600 shadow-xs"
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                aria-label="Your timetable request"
+                placeholder="Type your request in natural language…"
+                className="flex-1 min-w-0 bg-transparent text-[13px] font-medium focus:outline-none placeholder:text-[var(--muted)]"
               />
               <button
                 type="submit"
-                disabled={isLoading}
                 aria-label="Send message"
-                className="absolute right-1.5 w-8 h-8 rounded-full bg-gradient-to-r from-blue-700 to-indigo-600 hover:from-blue-600 hover:to-indigo-500 text-white flex items-center justify-center transition shadow-xs"
+                disabled={thinking}
+                className="w-9 h-9 rounded-full text-white flex items-center justify-center disabled:opacity-60"
+                style={{ background: "linear-gradient(110deg,#155BFF,#2F7BF5)", boxShadow: "0 6px 14px rgba(21,91,255,.35)" }}
               >
-                <Send className="w-3 h-3" />
+                <Send className="w-4 h-4" strokeWidth={2.3} />
               </button>
             </div>
+            <p className="mt-2 text-[11px] text-[var(--muted)] font-medium">
+              The assistant proposes changes; it never publishes them without your confirmation.
+            </p>
           </form>
-        </div>
+        </section>
 
-        {/* COLUMN 2: Quick Actions (2x2 Grid) */}
-        <div className="p-5 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-card flex flex-col justify-between space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-extrabold text-xs uppercase tracking-wider font-heading flex items-center gap-1.5 text-blue-600">
-              ⚡ Quick Actions
+        {/* Quick actions */}
+        <section className={`${panel} p-4 sm:p-5 flex flex-col`} style={panelStyle} aria-labelledby="qa-h">
+          <div className="flex items-center justify-between mb-3">
+            <h2 id="qa-h" className="flex items-center gap-2 font-heading font-extrabold text-[17px]">
+              <Zap className="w-5 h-5 text-blue-600 dark:text-sky-400" strokeWidth={2.4} />
+              Quick Actions
             </h2>
-            <button
-              onClick={() => onNavigateTab && onNavigateTab("timetable")}
-              className="text-[11px] font-bold text-blue-600 hover:underline"
-            >
-              View All →
-            </button>
+            <span className="text-[12.5px] font-bold text-blue-600 dark:text-sky-400 flex items-center gap-1">
+              View All <ArrowRight className="w-3.5 h-3.5" strokeWidth={2.6} />
+            </span>
           </div>
-
-          {/* 2x2 Grid matching the showcase screenshot */}
-          <div className="grid grid-cols-2 gap-3">
-            {/* 1. Check Conflicts */}
-            <button
-              onClick={() => handleSend("Check for conflicts in timetable")}
-              className="p-3.5 rounded-2xl bg-gradient-to-br from-rose-50 to-red-100/60 dark:from-rose-950/40 dark:to-red-950/20 border border-rose-200 dark:border-rose-900/60 text-left hover:scale-[1.02] transition flex flex-col justify-between h-28"
-            >
-              <div className="w-8 h-8 rounded-xl bg-red-500/15 text-red-600 dark:text-red-400 flex items-center justify-center">
-                <AlertTriangle className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="font-black text-xs text-rose-950 dark:text-rose-200">
-                  Check Conflicts
-                </div>
-                <div className="text-[10px] text-rose-700 dark:text-rose-400 mt-0.5">
-                  Scan for clashes
-                </div>
-              </div>
-            </button>
-
-            {/* 2. View Timetable */}
-            <button
-              onClick={() => onNavigateTab && onNavigateTab("timetable")}
-              className="p-3.5 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-100/60 dark:from-blue-950/40 dark:to-indigo-950/20 border border-blue-200 dark:border-blue-900/60 text-left hover:scale-[1.02] transition flex flex-col justify-between h-28"
-            >
-              <div className="w-8 h-8 rounded-xl bg-blue-500/15 text-blue-600 dark:text-blue-400 flex items-center justify-center">
-                <Calendar className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="font-black text-xs text-blue-950 dark:text-blue-200">
-                  View Timetable
-                </div>
-                <div className="text-[10px] text-blue-700 dark:text-blue-400 mt-0.5">
-                  Your schedule
-                </div>
-              </div>
-            </button>
-
-            {/* 3. Get Suggestions */}
-            <button
-              onClick={() => handleSend("Suggest an alternative slot")}
-              className="p-3.5 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-100/60 dark:from-emerald-950/40 dark:to-teal-950/20 border border-emerald-200 dark:border-emerald-900/60 text-left hover:scale-[1.02] transition flex flex-col justify-between h-28"
-            >
-              <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-                <Lightbulb className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="font-black text-xs text-emerald-950 dark:text-emerald-200">
-                  Get Suggestions
-                </div>
-                <div className="text-[10px] text-emerald-700 dark:text-emerald-400 mt-0.5">
-                  Smart options
-                </div>
-              </div>
-            </button>
-
-            {/* 4. Ask a Question */}
-            <button
-              onClick={() => document.querySelector("input")?.focus()}
-              className="p-3.5 rounded-2xl bg-gradient-to-br from-purple-50 to-violet-100/60 dark:from-purple-950/40 dark:to-violet-950/20 border border-purple-200 dark:border-purple-900/60 text-left hover:scale-[1.02] transition flex flex-col justify-between h-28"
-            >
-              <div className="w-8 h-8 rounded-xl bg-purple-500/15 text-purple-600 dark:text-purple-400 flex items-center justify-center">
-                <MessageSquare className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="font-black text-xs text-purple-950 dark:text-purple-200">
-                  Ask a Question
-                </div>
-                <div className="text-[10px] text-purple-700 dark:text-purple-400 mt-0.5">
-                  Get instant help
-                </div>
-              </div>
-            </button>
+          <div className="grid grid-cols-2 grid-rows-2 gap-3 flex-1">
+            {actions.map((a) => (
+              <button
+                key={a.label}
+                onClick={a.run}
+                className={`qa-tile ${a.cls} min-h-[112px] p-3.5 text-left flex flex-col justify-between`}
+              >
+                <a.Icon className={`w-7 h-7 ${a.icon}`} strokeWidth={2.2} />
+                <span>
+                  <span className="block font-heading font-extrabold text-[13.5px] leading-tight">{a.label}</span>
+                  <span className="block mt-0.5 text-[11.5px] text-[var(--muted)] font-medium">{a.sub}</span>
+                </span>
+              </button>
+            ))}
           </div>
+        </section>
 
-          <div className="p-3 rounded-xl bg-[var(--bg)] border border-[var(--border)] text-[10px] text-[var(--muted)] flex items-center justify-between">
-            <span>Deterministic checks guarantee 0 hallucinations.</span>
-            <span className="font-bold text-emerald-600">Active</span>
-          </div>
-        </div>
-
-        {/* COLUMN 3: AI Assistant Stats */}
-        <div className="p-5 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-card flex flex-col justify-between space-y-4">
-          <div>
-            <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-[var(--muted)] font-heading mb-4">
-              <TrendingUp className="w-4 h-4 text-blue-600" />
-              AI Assistant Stats
+        {/* Stats */}
+        <section className={`${panel} p-4 sm:p-5 flex flex-col lg:col-span-2 xl:col-span-1`} style={panelStyle} aria-labelledby="st-h">
+          <h2 id="st-h" className="flex items-center gap-2 font-heading font-extrabold text-[15px] mb-3">
+            <BarChart3 className="w-[18px] h-[18px] text-blue-600 dark:text-sky-400" strokeWidth={2.4} />
+            AI Assistant Stats
+          </h2>
+          <div className="flex items-center gap-3">
+            <div className="relative w-[82px] h-[82px] shrink-0">
+              <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90" role="img" aria-label="Query success rate 92 percent">
+                <circle cx="50" cy="50" r="42" fill="none" stroke="var(--border)" strokeWidth="10" />
+                <circle cx="50" cy="50" r="42" fill="none" stroke={isDark ? "#22D3A5" : "#10B981"} strokeWidth="10" strokeLinecap="round" strokeDasharray={`${0.92 * 2 * Math.PI * 42} ${2 * Math.PI * 42}`} />
+              </svg>
+              <span className="absolute inset-0 flex items-center justify-center font-heading font-extrabold text-[20px]">92%</span>
             </div>
-
-            {/* 92% Query Success Circular Ring (matching screenshot) */}
-            <div className="flex items-center gap-3 p-3 rounded-2xl bg-[var(--bg)] border border-[var(--border)] mb-4">
-              <div className="relative w-14 h-14 shrink-0 flex items-center justify-center">
-                <svg className="w-14 h-14 -rotate-90" viewBox="0 0 36 36">
-                  <path
-                    className="text-[var(--border)]"
-                    strokeWidth="3.5"
-                    stroke="currentColor"
-                    fill="none"
-                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                  />
-                  <path
-                    className="text-teal-400"
-                    strokeDasharray="92, 100"
-                    strokeWidth="3.5"
-                    strokeLinecap="round"
-                    stroke="currentColor"
-                    fill="none"
-                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                  />
-                </svg>
-                <span className="absolute text-xs font-black font-heading">92%</span>
-              </div>
-              <div>
-                <div className="text-xs font-extrabold text-[var(--ink)]">
-                  Query Success Rate
-                </div>
-                <div className="text-[10px] text-[var(--muted)]">Automated & Validated</div>
-              </div>
-            </div>
-
-            {/* Performance Metric Counters */}
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between items-center py-1 border-b border-[var(--border)]/60">
-                <span className="text-[var(--muted)] flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-blue-500" /> Total Queries
-                </span>
-                <span className="font-extrabold font-heading">2.4K</span>
-              </div>
-              <div className="flex justify-between items-center py-1 border-b border-[var(--border)]/60">
-                <span className="text-[var(--muted)] flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-emerald-500" /> Saved Time
-                </span>
-                <span className="font-extrabold font-heading">120 hrs</span>
-              </div>
-              <div className="flex justify-between items-center py-1">
-                <span className="text-[var(--muted)] flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-500" /> Happy Students
-                </span>
-                <span className="font-extrabold font-heading text-emerald-600">98%</span>
-              </div>
+            <div className="text-[12.5px] font-semibold leading-tight">
+              Query
+              <br />
+              Success Rate
             </div>
           </div>
-
-          {/* Bottom Glowing Badge */}
-          <div className="p-3 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 text-white flex items-center justify-between text-xs font-bold shadow-md">
-            <span>“Your Smart Campus Companion”</span>
-            <Star className="w-3.5 h-3.5 fill-amber-300 text-amber-300" />
+          <ul className="mt-4 space-y-2.5 text-[12.5px] font-medium">
+            {stats.map((s) => (
+              <li key={s.label} className="flex items-center gap-2.5">
+                <s.Icon className="w-4 h-4 text-blue-600 dark:text-sky-400" strokeWidth={2.1} />
+                <span className="flex-1">{s.label}</span>
+                <span className="font-extrabold">{s.value}</span>
+              </li>
+            ))}
+          </ul>
+          <div
+            className="mt-4 rounded-xl px-3 py-2.5 text-center text-[12px] font-bold text-white relative"
+            style={{ background: "linear-gradient(110deg,#5B3DF5,#2F6BFF)" }}
+          >
+            “Your Smart
+            <br />
+            Campus Companion”
+            <Star className="absolute right-2 bottom-2 w-3.5 h-3.5 text-white/60" />
           </div>
-        </div>
+        </section>
       </div>
     </div>
   );

@@ -61,6 +61,8 @@
   --kpi-rose-bg: linear-gradient(135deg, #FFF1F2 0%, #FFFFFF 75%);
   --kpi-rose-border: #FBD5D9;
 
+  --qa-green-bg: #E2F6EC;
+  --qa-green-border: #C9EBDA;
   --qa-blue-bg: #E4EDFF;
   --qa-blue-border: #D3E2FF;
   --qa-peach-bg: #FFEADD;
@@ -127,6 +129,8 @@
   --kpi-rose-bg: linear-gradient(135deg, #3A1424 0%, #14152B 80%);
   --kpi-rose-border: #5A2338;
 
+  --qa-green-bg: #0F2F33;
+  --qa-green-border: #1F5550;
   --qa-blue-bg: #14264B;
   --qa-blue-border: #1F3866;
   --qa-peach-bg: #2D2229;
@@ -174,9 +178,7 @@ h1, h2, h3, h4, .font-heading {
   .kpi-blue   { background: var(--kpi-blue-bg);   border-color: var(--kpi-blue-border); }
   .kpi-violet { background: var(--kpi-violet-bg); border-color: var(--kpi-violet-border); }
   .kpi-green  { background: var(--kpi-green-bg);  border-color: var(--kpi-green-border); }
-
   .kpi-rose   { background: var(--kpi-rose-bg);   border-color: var(--kpi-rose-border); }
-
   .kpi-amber  { background: var(--kpi-amber-bg);  border-color: var(--kpi-amber-border); }
 
   .qa-tile {
@@ -191,6 +193,7 @@ h1, h2, h3, h4, .font-heading {
   .qa-blue  { background: var(--qa-blue-bg);  border-color: var(--qa-blue-border); }
   .qa-peach { background: var(--qa-peach-bg); border-color: var(--qa-peach-border); }
   .qa-lilac { background: var(--qa-lilac-bg); border-color: var(--qa-lilac-border); }
+  .qa-green { background: var(--qa-green-bg); border-color: var(--qa-green-border); }
   .qa-rose  { background: var(--qa-rose-bg);  border-color: var(--qa-rose-border); }
 }
 

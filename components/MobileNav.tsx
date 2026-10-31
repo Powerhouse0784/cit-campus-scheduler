@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Home, CalendarDays, CalendarCheck, MoreHorizontal, X } from "lucide-react";
+import { Home, Star, Settings, MoreHorizontal, X } from "lucide-react";
 import { NAV_ITEMS } from "@/components/Sidebar";
 
 interface MobileNavProps {
@@ -11,8 +11,8 @@ interface MobileNavProps {
 
 const PRIMARY = [
   { id: "dashboard", label: "Home", icon: Home },
-  { id: "timetable", label: "Timetable", icon: CalendarDays },
-  { id: "venues", label: "Bookings", icon: CalendarCheck },
+  { id: "spectra", label: "Events", icon: Star },
+  { id: "settings", label: "Settings", icon: Settings },
 ];
 
 /** Bottom tab bar shown below the md breakpoint (matches the mobile reference). */
