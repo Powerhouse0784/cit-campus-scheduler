@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { Search, Bell, Moon, Sun, ChevronDown, RotateCcw, ShieldCheck } from "lucide-react";
+import { Search, Bell, Moon, Sun, ChevronDown, RotateCcw, ShieldCheck, Lock, LogIn, CheckCircle2 } from "lucide-react";
 import CitLogo from "@/components/CitLogo";
 import ConfirmModal from "@/components/ConfirmModal";
+import LoginModal from "@/components/LoginModal";
 
 interface TopNavbarProps {
   isDark: boolean;
@@ -15,13 +16,6 @@ interface TopNavbarProps {
   searchQuery?: string;
   onSearchChange?: (value: string) => void;
 }
-
-const ROLE_OPTIONS = [
-  { value: "admin", label: "Admin (Dean's Office)", credential: "admin@cit.edu" },
-  { value: "department_coordinator", label: "Dept. Coordinator (ECE)", credential: "coordinator@cit.edu" },
-  { value: "faculty", label: "Faculty (Dr. Amit Behera)", credential: "faculty@cit.edu" },
-  { value: "club", label: "Club Rep (Dance Club)", credential: "clubrep@cit.edu" },
-];
 
 export default function TopNavbar({
   isDark,
@@ -35,6 +29,8 @@ export default function TopNavbar({
 }: TopNavbarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [currentSession, setCurrentSession] = useState<any>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const getRoleDisplayName = (r: string) => {
@@ -47,25 +43,37 @@ export default function TopNavbar({
     }
   };
 
-  const handleRoleChange = async (newRole: string) => {
-    setRole(newRole);
+  const syncSession = async () => {
     try {
-      await fetch("/api/cit/auth/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role: newRole }),
-      });
+      const res = await fetch("/api/cit/auth/session");
+      const data = await res.json();
+      if (data.success && data.session) {
+        setCurrentSession(data.session);
+        if (data.session.role && data.session.role !== role) {
+          setRole(data.session.role);
+        }
+      }
     } catch {}
   };
 
   useEffect(() => {
-    // Synchronize initial session with server
-    fetch("/api/cit/auth/session", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role }),
-    }).catch(() => {});
+    syncSession();
   }, []);
+
+  const handleRoleChange = async (newRole: string) => {
+    setRole(newRole);
+    try {
+      const res = await fetch("/api/cit/auth/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: newRole }),
+      });
+      const data = await res.json();
+      if (data.success && data.session) {
+        setCurrentSession(data.session);
+      }
+    } catch {}
+  };
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -123,7 +131,21 @@ export default function TopNavbar({
           />
         </div>
 
-        <div className="flex items-center gap-3 ml-auto">
+        <div className="flex items-center gap-2.5 sm:gap-3 ml-auto">
+          {/* Quick Sign In / Switch Role Pill */}
+          <button
+            onClick={() => setShowLoginModal(true)}
+            aria-label="Authentication and credentials dialog"
+            className="hidden sm:inline-flex items-center gap-1.5 h-10 px-3.5 rounded-full border text-[12px] font-bold text-blue-600 dark:text-sky-400 hover:bg-[var(--row-hover)] transition shadow-sm"
+            style={{ borderColor: "var(--search-border)", background: "var(--surface)" }}
+          >
+            <Lock className="w-3.5 h-3.5 text-emerald-500" />
+            <span>{currentSession?.name ? currentSession.name.split(" ")[0] : getRoleDisplayName(role)}</span>
+            <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded bg-blue-500/10 text-blue-600 dark:text-sky-300 uppercase">
+              {role}
+            </span>
+          </button>
+
           <button
             onClick={toggleTheme}
             aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
@@ -151,7 +173,7 @@ export default function TopNavbar({
               className="flex items-center gap-2 rounded-full pl-0.5 pr-1.5 py-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60"
             >
               <span className="w-11 h-11 rounded-full bg-gradient-to-br from-[#2F7BF5] to-[#123A82] text-white font-extrabold text-base flex items-center justify-center ring-2 ring-white/70 dark:ring-white/10 shadow-md">
-                R
+                {role === "admin" ? "D" : role === "faculty" ? "F" : role === "department_coordinator" ? "C" : "U"}
               </span>
               <ChevronDown className={`w-4 h-4 text-[var(--ink)] transition-transform ${menuOpen ? "rotate-180" : ""}`} />
             </button>
@@ -164,29 +186,32 @@ export default function TopNavbar({
               >
                 <div className="flex items-center gap-3">
                   <span className="w-10 h-10 rounded-full bg-gradient-to-br from-[#2F7BF5] to-[#123A82] text-white font-extrabold flex items-center justify-center">
-                    R
+                    {role === "admin" ? "D" : role === "faculty" ? "F" : "U"}
                   </span>
                   <div className="leading-tight">
-                    <div className="text-sm font-extrabold">Ritik</div>
-                    <div className="text-xs text-[var(--muted)] font-medium">{getRoleDisplayName(role)}</div>
+                    <div className="text-sm font-extrabold">{currentSession?.name || getRoleDisplayName(role)}</div>
+                    <div className="text-xs text-[var(--muted)] font-medium capitalize">{role.replace("_", " ")}</div>
                   </div>
                 </div>
 
-                <div>
-                  <label htmlFor="acting-role" className="text-[10px] font-bold text-[var(--muted)] tracking-wider mb-1.5 uppercase flex items-center gap-1.5">
-                    <ShieldCheck className="w-3 h-3" /> Acting Role
-                  </label>
-                  <select
-                    id="acting-role"
-                    value={role}
-                    onChange={(e) => handleRoleChange(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg)] text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-                  >
-                    {ROLE_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
+                <div className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-[11.5px] flex items-center justify-between">
+                  <span className="font-semibold text-blue-700 dark:text-sky-300">Signed Session:</span>
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Verified
+                  </span>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setShowLoginModal(true);
+                  }}
+                  className="w-full py-2 px-3 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 flex items-center justify-center gap-1.5 shadow"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  Sign In / Switch Account
+                </button>
 
                 <button
                   role="menuitem"
@@ -194,7 +219,7 @@ export default function TopNavbar({
                     setMenuOpen(false);
                     setShowResetConfirm(true);
                   }}
-                  className="w-full py-2.5 px-3 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 rounded-xl text-xs font-bold hover:bg-red-50 dark:hover:bg-red-950/20 transition flex items-center justify-center gap-1.5"
+                  className="w-full py-2 px-3 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 rounded-xl text-xs font-bold hover:bg-red-50 dark:hover:bg-red-950/20 transition flex items-center justify-center gap-1.5"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                   Reset Demo Data
@@ -218,6 +243,18 @@ export default function TopNavbar({
           onReset();
         }}
         onCancel={() => setShowResetConfirm(false)}
+      />
+
+      {/* Login & Role Authentication Modal */}
+      <LoginModal
+        isOpen={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+        currentUserRole={role}
+        onLoginSuccess={(session) => {
+          setCurrentSession(session);
+          setRole(session.role);
+        }}
+        isDark={isDark}
       />
     </>
   );

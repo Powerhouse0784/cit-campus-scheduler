@@ -4,9 +4,15 @@ import { apiError } from "@/lib/api-response";
 
 export async function GET() {
   try {
-    return NextResponse.json(citBackend.getDashboardStats());
+    const dashboardStats = citBackend.getDashboardStats();
+    const analytics = citBackend.getAnalyticsData();
+    return NextResponse.json({
+      success: true,
+      ...dashboardStats,
+      analytics,
+    });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to load dashboard statistics.";
+    const message = error instanceof Error ? error.message : "Unable to load dashboard statistics and analytics.";
     return apiError(message, 500);
   }
 }

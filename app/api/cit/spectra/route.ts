@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import fs from "fs";
 import path from "path";
 import { apiError, readJsonBody } from "@/lib/api-response";
 import { BookingEngine, PRIORITY_ORDER, CAT_WEIGHT } from "@/lib/booking-engine";
-import { getAuthenticatedSession, AuthSession } from "@/lib/auth-session";
+import { getAuthenticatedSession } from "@/lib/auth-session";
+import { readDurableJson, writeDurableJson } from "@/lib/durable-state";
 
 export interface DecisionHistoryItem {
   id: string;
   request_id: string;
   event_title: string;
-  action: "approve" | "reject" | "cancel" | "alternative_offered";
+  action: "approve" | "reject" | "cancel" | "alternative_offered" | "approved" | "rejected" | "cancelled";
   previous_status: string;
   new_status: string;
   by_user: string;
@@ -30,26 +30,25 @@ export async function GET(req: NextRequest) {
     const overridesPath = path.join(rootDir, "data", "spectra_overrides.json");
     const historyPath = path.join(rootDir, "data", "spectra_history.json");
 
-    if (!fs.existsSync(dataPath) || !fs.existsSync(schedPath)) {
-      return apiError("Dataset or schedule file is missing.", 404);
+    const data = await readDurableJson<any>(dataPath, null);
+    const schedule = await readDurableJson<any>(schedPath, null);
+    if (!data || !schedule) {
+      return apiError("Dataset or schedule is missing from persistent storage.", 404);
     }
 
-    const data = JSON.parse(fs.readFileSync(dataPath, "utf-8"));
-    const schedule = JSON.parse(fs.readFileSync(schedPath, "utf-8"));
-
     let overrides: Record<string, any> = {};
-    if (fs.existsSync(overridesPath)) {
+    {
       try {
-        overrides = JSON.parse(fs.readFileSync(overridesPath, "utf-8"));
+        overrides = await readDurableJson<Record<string, any>>(overridesPath, {});
       } catch {
         overrides = {};
       }
     }
 
     let history: DecisionHistoryItem[] = [];
-    if (fs.existsSync(historyPath)) {
+    {
       try {
-        history = JSON.parse(fs.readFileSync(historyPath, "utf-8"));
+        history = await readDurableJson<DecisionHistoryItem[]>(historyPath, []);
       } catch {
         history = [];
       }
@@ -168,12 +167,11 @@ export async function POST(req: NextRequest) {
     const overridesPath = path.join(rootDir, "data", "spectra_overrides.json");
     const historyPath = path.join(rootDir, "data", "spectra_history.json");
 
-    if (!fs.existsSync(dataPath) || !fs.existsSync(schedPath)) {
-      return apiError("Dataset or schedule file is missing.", 404);
+    const data = await readDurableJson<any>(dataPath, null);
+    const schedule = await readDurableJson<any>(schedPath, null);
+    if (!data || !schedule) {
+      return apiError("Dataset or schedule is missing from persistent storage.", 404);
     }
-
-    const data = JSON.parse(fs.readFileSync(dataPath, "utf-8"));
-    const schedule = JSON.parse(fs.readFileSync(schedPath, "utf-8"));
     const engine = new BookingEngine(data);
 
     const requestId = body.request_id;
@@ -189,9 +187,9 @@ export async function POST(req: NextRequest) {
 
     // Load overrides
     let overrides: Record<string, any> = {};
-    if (fs.existsSync(overridesPath)) {
+    {
       try {
-        overrides = JSON.parse(fs.readFileSync(overridesPath, "utf-8"));
+        overrides = await readDurableJson<Record<string, any>>(overridesPath, {});
       } catch {
         overrides = {};
       }
@@ -199,9 +197,9 @@ export async function POST(req: NextRequest) {
 
     // Load history
     let history: DecisionHistoryItem[] = [];
-    if (fs.existsSync(historyPath)) {
+    {
       try {
-        history = JSON.parse(fs.readFileSync(historyPath, "utf-8"));
+        history = await readDurableJson<DecisionHistoryItem[]>(historyPath, []);
       } catch {
         history = [];
       }
@@ -210,7 +208,7 @@ export async function POST(req: NextRequest) {
     const currentBookingInSched = (schedule.fest_week?.bookings || []).find((b: any) => b.request_id === requestId);
     const previousStatus = overrides[requestId]?.status || currentBookingInSched?.status || "pending";
 
-    const saveOverrideAndHistory = (
+    const saveOverrideAndHistory = async (
       reqId: string,
       status: "approved" | "rejected" | "cancelled" | "alternative_offered",
       reason: string,
@@ -228,7 +226,7 @@ export async function POST(req: NextRequest) {
         start_period: extra?.start_period,
         end_period: extra?.end_period,
       };
-      fs.writeFileSync(overridesPath, JSON.stringify(overrides, null, 2), "utf-8");
+      await writeDurableJson(overridesPath, overrides);
 
       // 2. Synchronize schedule.json (fest_week.bookings) (Bug 3)
       if (!schedule.fest_week) schedule.fest_week = { bookings: [], session_overrides: [] };
@@ -248,21 +246,23 @@ export async function POST(req: NextRequest) {
       } else {
         schedule.fest_week.bookings.push(bookingRecord);
       }
-      fs.writeFileSync(schedPath, JSON.stringify(schedule, null, 2), "utf-8");
+      await writeDurableJson(schedPath, schedule);
 
       // 3. Append to History Audit Log (Task 113)
-      // `status` is past-tense ("approved"); the audit log's `action` uses the verb form.
-      const actionByStatus: Record<typeof status, DecisionHistoryItem["action"]> = {
-        approved: "approve",
-        rejected: "reject",
-        cancelled: "cancel",
-        alternative_offered: "alternative_offered",
-      };
+      const historyAction: DecisionHistoryItem["action"] =
+        status === "approved"
+          ? "approve"
+          : status === "rejected"
+          ? "reject"
+          : status === "cancelled"
+          ? "cancel"
+          : "alternative_offered";
+
       const historyEntry: DecisionHistoryItem = {
         id: `HIST-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         request_id: reqId,
         event_title: targetReq.title,
-        action: actionByStatus[status],
+        action: historyAction,
         previous_status: previousStatus,
         new_status: status,
         by_user: currentUser,
@@ -275,7 +275,7 @@ export async function POST(req: NextRequest) {
         end_period: bookingRecord.end_period,
       };
       history.unshift(historyEntry);
-      fs.writeFileSync(historyPath, JSON.stringify(history, null, 2), "utf-8");
+      await writeDurableJson(historyPath, history);
     };
 
     // ACTION: GET ALTERNATIVES (Task 107 & 108)
@@ -313,6 +313,10 @@ export async function POST(req: NextRequest) {
 
     // ACTION: APPROVE (Tasks 105, 109, 110, 115)
     if (body.action === "approve") {
+      if (userRole !== "admin" && userRole !== "department_coordinator") return apiError("Only Admin or Department Coordinator accounts may approve events.", 403);
+      if (previousStatus !== "pending" && previousStatus !== "alternative_offered") {
+        return apiError(`Only pending or alternative-offered requests can be approved (current status: ${previousStatus}).`, 409);
+      }
       // Task 110: Prevent unauthorized approvals
       if (userRole !== "admin" && userRole !== "department_coordinator") {
         return apiError("Unauthorized: Only Dean's Office or Department Coordinators can approve booking requests.", 403);
@@ -321,12 +325,11 @@ export async function POST(req: NextRequest) {
       // Task 109: Prevent self-approval (Section 4 Governance Rule: "Nobody can approve their own request")
       const reqName = (targetReq.requester || "").trim().toLowerCase();
       const currName = currentUser.trim().toLowerCase();
-      const isSimulatedSelf = session.isSimulatedSelf || body.simulate_identity === "spectra_core";
+      const isSimulatedSelf = session.isSimulatedSelf === true;
       const isSelfApproval =
         isSimulatedSelf ||
         currName === reqName ||
-        (userRole === "admin" && reqName === "spectra core team" && currName.includes("core")) ||
-        (userRole === "department_coordinator" && targetReq.department && currName.toLowerCase().includes(targetReq.department.toLowerCase()));
+        (userRole === "admin" && reqName === "spectra core team" && currName.includes("core"));
 
       if (isSelfApproval) {
         return apiError("Governance violation: Self-approval is strictly prohibited. You cannot approve your own booking request.", 403);
@@ -385,7 +388,7 @@ export async function POST(req: NextRequest) {
         ? `Approved by ${currentUser} (${userRole}) following official schedule validation.`
         : `Approved in alternative time window by ${currentUser}.`;
 
-      saveOverrideAndHistory(requestId, finalStatus, finalReason, {
+      await saveOverrideAndHistory(requestId, finalStatus, finalReason, {
         room_id: allocatedRoom,
         day: allocatedDay,
         start_period: startP,
@@ -406,6 +409,9 @@ export async function POST(req: NextRequest) {
         return apiError("Unauthorized: Only Dean's Office or Department Coordinators can offer alternatives.", 403);
       }
 
+      if (previousStatus !== "pending" && previousStatus !== "alternative_offered") {
+        return apiError(`Only pending requests can receive an alternative (current status: ${previousStatus}).`, 409);
+      }
       const altRoom = body.room_id;
       const altDay = body.day;
       const altStart = parseInt(body.start_period, 10);
@@ -446,7 +452,7 @@ export async function POST(req: NextRequest) {
       }
 
       const altReason = body.reason || `Alternative slot (${altRoom} on ${altDay} P${altStart}–P${altEnd}) offered by ${currentUser} to resolve venue contention.`;
-      saveOverrideAndHistory(requestId, "alternative_offered", altReason, {
+      await saveOverrideAndHistory(requestId, "alternative_offered", altReason, {
         room_id: altRoom,
         day: altDay,
         start_period: altStart,
@@ -471,12 +477,15 @@ export async function POST(req: NextRequest) {
       if (userRole !== "admin" && userRole !== "department_coordinator") {
         return apiError("Unauthorized: Only Dean's Office or Department Coordinators can reject booking requests.", 403);
       }
+      if (previousStatus !== "pending" && previousStatus !== "alternative_offered") {
+        return apiError(`Only pending requests can be rejected (current status: ${previousStatus}).`, 409);
+      }
 
       const rejectReason = (body.reason && body.reason.trim())
         ? body.reason.trim()
         : "Rejected due to capacity or venue scheduling priority conflicts.";
 
-      saveOverrideAndHistory(requestId, "rejected", rejectReason);
+      await saveOverrideAndHistory(requestId, "rejected", rejectReason);
 
       return NextResponse.json({
         success: true,
@@ -496,7 +505,7 @@ export async function POST(req: NextRequest) {
       }
 
       const cancelReason = `Booking cancelled by ${currentUser} (${userRole}).`;
-      saveOverrideAndHistory(requestId, "cancelled", cancelReason);
+      await saveOverrideAndHistory(requestId, "cancelled", cancelReason);
 
       return NextResponse.json({
         success: true,

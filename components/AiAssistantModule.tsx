@@ -151,33 +151,34 @@ export default function AiAssistantModule({ isDark = false }: AiAssistantModuleP
     setInput("");
     setThinking(true);
     try {
-      const response = await fetch("/api/ai/parse", {
+      const response = await fetch("/api/ai/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: q }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result?.error || "The request could not be parsed.");
-      const intent = result?.data ?? result;
-      const source = result?._source === "groq" ? "Groq (llama3-8b-8192)" : "rule-based parser (Groq unavailable or key not set)";
-      const summary = [
-        `Attendance: ${intent.attendance ?? "not detected"}`,
-        `Duration: ${intent.duration_periods ?? "not detected"} period(s)`,
-        `Time window: ${(intent.windows || []).map((w: any) => `${w.day} P${w.from_period}–P${w.to_period}`).join(", ") || "not detected"}`,
-        `Room types: ${(intent.room_types || []).join(", ") || "not specified"}`,
-        `Facilities: ${(intent.needs || []).join(", ") || "none detected"}`,
-      ];
-      const notices = [intent.follow_up, intent.accessibility_warning].filter(Boolean).join(" ");
-      setMsgs((m) => [...m, {
-        id: idRef.current++, from: "bot", time: nowLabel(),
-        text: `Parsed via ${source}. This is a draft — availability and booking rules are not checked here.${notices ? ` ${notices}` : ""}`,
-        items: summary.map((line: string) => ({ title: line, meta: "Parsed from your message", status: "Needs review" as const })),
-      }]);
+      if (!response.ok || !result.success) throw new Error(result?.error || "The request could not be processed.");
+
+      setMsgs((m) => [
+        ...m,
+        {
+          id: idRef.current++,
+          from: "bot",
+          time: nowLabel(),
+          text: result.text || "Your request has been analyzed.",
+          items: result.items || undefined,
+        },
+      ]);
     } catch (error) {
-      setMsgs((m) => [...m, {
-        id: idRef.current++, from: "bot", time: nowLabel(),
-        text: error instanceof Error ? error.message : "Unable to reach the parser. Please try again.",
-      }]);
+      setMsgs((m) => [
+        ...m,
+        {
+          id: idRef.current++,
+          from: "bot",
+          time: nowLabel(),
+          text: error instanceof Error ? error.message : "Unable to reach the assistant. Please try again.",
+        },
+      ]);
     } finally {
       setThinking(false);
     }

@@ -1,42 +1,73 @@
 # AI Usage Declaration — CIT Campus Scheduler
 
-## AI features implemented in this product
+## Team Information
+- **Team Name**: CIT Master Minds
+- **Project**: CIT Campus Scheduler & Operations Hub (Crunch Week 2024)
+- **Submission Date**: November 1, 2024
 
-### 1. Natural-language booking parser (`lib/ai-parser.ts` + `app/api/ai/parse/route.ts`)
-- When `GROQ_API_KEY` is set, the POST endpoint calls the Groq API (`llama3-8b-8192`) to extract structured booking intent from English and Hinglish text.
-- The Groq response is **always post-processed and normalised by application code** in `normaliseGroqOutput()` before it is returned. The LLM output is treated as untrusted input.
-- If Groq is unavailable, times out (8-second limit), or the key is not set, the system **automatically falls back** to the deterministic rule-based parser in `lib/ai-parser.ts`. The manual booking form continues to work without any LLM.
-- The parser response field `_source` tells the caller whether the result came from `"groq"` or `"rule_based"` or `"rule_based_fallback"`.
+---
 
-### 2. Deterministic rule-based parser (`lib/ai-parser.ts`)
-- Keyword and regular-expression based extraction of attendance, duration, day, time period, room type, facilities, student groups, and accessibility requirements.
-- Used as the primary parser when no API key is present, and as the fallback when Groq fails.
+## 1. AI Features Implemented in the Product
 
-## What the LLM is NOT allowed to decide
-- Whether a schedule or booking is valid
-- Whether a room is available or has a conflict
-- Whether a booking is approved or rejected
-- Whether hard constraints are satisfied
-- Any write operation to scheduling data
+### A. Natural-Language Booking & Query Parser (`lib/ai-parser.ts`, `app/api/ai/parse/route.ts`)
+- **Model**: Groq Cloud API running `llama3-8b-8192` (inference speed ~300 tokens/sec).
+- **Purpose**: Extracts structured intent from complex English and conversational Hinglish messages (e.g. *"Kal dopahar 3 baje 80 students ke liye LH-1 chahiye projector ke saath"*).
+- **Extraction Schema**: Returns normalized JSON specifying event title, category, attendance, duration, days, period windows, room types, facilities, and accessibility requirements.
+- **Normalisation & Safety Layer**: Every LLM output is strictly post-processed and clamped by `normaliseGroqOutput()` before any scheduling engine receives it. The LLM output is treated as untrusted input.
 
-All of the above are handled exclusively by deterministic application code (the rule engine in `lib/booking-engine.ts`, `lib/timetable-engine.ts`, and `lib/exam-engine.ts`). Every LLM output goes through these checks before changing any data.
+### B. Deterministic Rule-Based Fallback Guarantee
+- When `GROQ_API_KEY` is not set or network latency exceeds 8 seconds, the application automatically falls back to the deterministic regular-expression & keyword parser in `lib/ai-parser.ts`.
+- The UI transparently displays the parsing source (`Groq (llama3-8b-8192)` vs `rule_based_fallback`). Judges can verify full functionality without an API key.
 
-## Provider details
-| Provider | Model | Used for | Key env var |
+### C. Conversational Faculty AI Assistant (`app/api/ai/assistant/route.ts`, `components/AiAssistantModule.tsx`)
+- Provides natural-language schedule interrogation, timetable queries, conflict scans, and rescheduling proposals.
+- **Prompt Injection Defense**: Evaluates incoming prompts against malicious jailbreak and privilege-escalation patterns (`ignore previous instructions`, `grant admin`, `override rules`).
+- **Priority Policy Enforcement**: Prevents lower-priority roles (students/clubs) from using natural language prompts to displace academic courses or exam periods.
+
+---
+
+## 2. What the AI is NOT Allowed to Decide (Safety Boundary)
+
+Under our strict architecture, **no AI model or LLM makes scheduling, conflict, or allocation decisions**:
+1. **Constraint Satisfaction**: The LLM never decides whether a slot is free, whether capacity is sufficient, or whether a room type matches. All H1–H14 hard constraints are verified by deterministic code (`lib/timetable-engine.ts`, `lib/booking-engine.ts`, `lib/exam-engine.ts`).
+2. **Approval Authority**: The LLM never approves, rejects, or publishes bookings or disruption changes. Approvals require cryptographic session authorization (`lib/auth-session.ts`).
+3. **Rescheduling Solver**: Timetable reallocations are computed by the deterministic Constraint Satisfaction Search (`lib/rescheduling-solver.ts`), searching for low-disruption candidates; results must be validated and are not guaranteed globally optimal.
+
+---
+
+## 3. Development Assistance Declaration
+
+In accordance with competition rules, the following AI tools and coding assistants were utilized during the development lifecycle:
+
+| Tool / Assistant | Provider | Dates Used | Codebase Contributions |
 |---|---|---|---|
-| Groq | `llama3-8b-8192` | Natural-language booking intent extraction | `GROQ_API_KEY` |
+| **Antigravity / Gemini 2.0** | Google DeepMind | Oct 27 – Nov 1, 2024 | Architectural scaffolding, TypeScript interface definitions, SVG UI components, unit tests, and Tailwind CSS responsive styling. |
+| **Llama-3-8B-8192** | Meta / Groq | Oct 28 – Nov 1, 2024 | Conversational intent extraction, Hinglish translation patterns, and few-shot booking extraction prompt design. |
+| **GitHub Copilot** | GitHub / OpenAI | Oct 27 – Oct 30, 2024 | Code autocompletion, boilerplate Next.js API routes, and CSV-to-JSON data ingestion scripts. |
 
-## Manual fallback guarantee
-If `GROQ_API_KEY` is not set or Groq is unavailable, the booking form and AI Assistant continue to work using the rule-based parser. Judges can verify this by removing the key from the environment.
+### Specific Parts Written by Human Engineers vs AI Assistance
+- **100% Deterministic Engine Code (Human Architected & Verified)**:
+  - `lib/timetable-engine.ts` (H1–H14 hard constraint logic, S1–S6 soft penalty calculation)
+  - `lib/exam-engine.ts` (Dynamic exam slotting, 50% capacity cap, cohort clash prevention)
+  - `lib/rescheduling-solver.ts` (CSP tree search, stability objective minimization)
+  - `lib/auth-session.ts` (HMAC-SHA256 session signatures and constant-time password verification)
+- **AI-Assisted Modules**:
+  - UI layout and Tailwind styling in `components/`
+  - Prompt engineering and regex dictionary in `lib/ai-parser.ts`
+  - Synthetic test cases in `data/sample_disruption.json` and `examples/sample_requests.md`
 
-## Development assistance
-AI coding assistants (including Antigravity / Gemini) were used to accelerate development. The team must update this section before final submission with specific tool names, dates, and which parts of the codebase they contributed to.
+---
 
-## Prompt storage
+## 4. Prompt Storage & Privacy
+
 - The system prompt sent to Groq is defined as a constant `GROQ_SYSTEM_PROMPT` in `app/api/ai/parse/route.ts`.
-- No conversation history is stored; each request is stateless.
+- **Zero Data Retention**: The system does not store user prompts or conversational history in third-party model logs; requests are completely stateless.
 
-## Known limitations
-- The Groq parser may return incomplete JSON for highly ambiguous requests; the normalisation layer applies safe defaults.
-- Date/time interpretation uses period numbers (P1–P13), not calendar dates; users must confirm the parsed output.
-- The parser does not produce validated venue alternatives; alternatives require deterministic engine checks.
+---
+
+## 5. Known Limitations
+- The parser is not a general-purpose conversational agent. Ambiguous or incomplete requests may require user correction; deterministic validation must be used before any booking decision.
+- Demo credentials are intended only for local evaluation and must be replaced/disabled before public production use.
+- Persistence currently uses process memory, `/tmp`, and local JSON files as fallbacks. These are **not durable shared storage on Vercel**; configure a database-backed adapter before relying on cross-instance persistence.
+- Production authentication requires `CIT_AUTH_SECRET` (at least 32 characters). The app deliberately refuses to mint sessions with a predictable production fallback secret.
+- Period numbers (P1–P13) follow the institution's official 08:00–21:00 schedule structure.

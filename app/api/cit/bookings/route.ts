@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import fs from "fs";
 import path from "path";
 import { BookingEngine } from "@/lib/booking-engine";
 import { apiError, readJsonBody } from "@/lib/api-response";
 import { getAuthenticatedSession } from "@/lib/auth-session";
+import { readDurableJson, writeDurableJson } from "@/lib/durable-state";
 
 export async function GET() {
   try {
@@ -12,21 +12,13 @@ export async function GET() {
     const schedPath = path.join(rootDir, "exports", "schedule.json");
     const userBookingsPath = path.join(rootDir, "data", "user_bookings.json");
 
-    if (!fs.existsSync(dataPath) || !fs.existsSync(schedPath)) {
-      return apiError("Dataset or schedule file is missing.", 404);
+    const data = await readDurableJson<any>(dataPath, null);
+    const schedule = await readDurableJson<any>(schedPath, null);
+    if (!data || !schedule) {
+      return apiError("Dataset or schedule is missing from persistent storage.", 404);
     }
 
-    const data = JSON.parse(fs.readFileSync(dataPath, "utf-8"));
-    const schedule = JSON.parse(fs.readFileSync(schedPath, "utf-8"));
-
-    let userBookings: any[] = [];
-    if (fs.existsSync(userBookingsPath)) {
-      try {
-        userBookings = JSON.parse(fs.readFileSync(userBookingsPath, "utf-8"));
-      } catch {
-        userBookings = [];
-      }
-    }
+    let userBookings: any[] = await readDurableJson<any[]>(userBookingsPath, []);
 
     const requestMap = new Map<string, any>((data.booking_requests || []).map((r: any) => [r.id, r]));
     const roomMap = new Map<string, any>((data.rooms || []).map((r: any) => [r.id, r]));
@@ -97,12 +89,11 @@ export async function POST(req: NextRequest) {
     const schedPath = path.join(rootDir, "exports", "schedule.json");
     const userBookingsPath = path.join(rootDir, "data", "user_bookings.json");
 
-    if (!fs.existsSync(dataPath) || !fs.existsSync(schedPath)) {
-      return apiError("Dataset or schedule file is missing.", 404);
+    const data = await readDurableJson<any>(dataPath, null);
+    const schedule = await readDurableJson<any>(schedPath, null);
+    if (!data || !schedule) {
+      return apiError("Dataset or schedule is missing from persistent storage.", 404);
     }
-
-    const data = JSON.parse(fs.readFileSync(dataPath, "utf-8"));
-    const schedule = JSON.parse(fs.readFileSync(schedPath, "utf-8"));
     const engine = new BookingEngine(data);
 
     // Authenticated server-side session identity
@@ -137,6 +128,7 @@ export async function POST(req: NextRequest) {
 
     // 2. ACTION: SUBMIT BOOKING (Tasks 87, 88)
     if (body.action === "submit") {
+      if (userRole === "student") return apiError("Please sign in with an authorized campus account to submit a booking.", 401);
       const attendance = parseInt(body.attendance, 10) || 50;
       const duration = parseInt(body.duration_periods, 10) || 2;
       const startP = parseInt(body.start_period, 10) || 10;
@@ -163,12 +155,12 @@ export async function POST(req: NextRequest) {
 
       // Workflow: Admin/Coordinator bookings are immediately approved if available.
       // Club/Faculty requests enter "pending" approval status if venue is available.
-      let status: "approved" | "pending" | "rejected";
+      let status: "pending" | "rejected";
       if (!checkResult.available) {
         status = "rejected";
-      } else if (userRole === "admin" || userRole === "department_coordinator" || body.auto_approve === true) {
-        status = "approved";
       } else {
+        // All user-created bookings enter the approval queue. A client-supplied
+        // `auto_approve` flag must never bypass the approval workflow.
         status = "pending";
       }
 
@@ -196,34 +188,17 @@ export async function POST(req: NextRequest) {
 
       // Persist in user_bookings.json
       let userBookings: any[] = [];
-      if (fs.existsSync(userBookingsPath)) {
+      {
         try {
-          userBookings = JSON.parse(fs.readFileSync(userBookingsPath, "utf-8"));
+          userBookings = await readDurableJson<any[]>(userBookingsPath, []);
         } catch {
           userBookings = [];
         }
       }
       userBookings.unshift(newBooking);
-      fs.writeFileSync(userBookingsPath, JSON.stringify(userBookings, null, 2), "utf-8");
+      await writeDurableJson(userBookingsPath, userBookings);
 
-      // If approved, also add to schedule.json fest_week.bookings
-      if (status === "approved") {
-        if (!schedule.fest_week) schedule.fest_week = { bookings: [], session_overrides: [] };
-        schedule.fest_week.bookings.push({
-          request_id: newBookingId,
-          status: "approved",
-          day,
-          start_period: startP,
-          end_period: endP,
-          room_id: roomId,
-          reason: checkResult.explanation,
-        });
-        fs.writeFileSync(schedPath, JSON.stringify(schedule, null, 2), "utf-8");
-      }
-
-      const message = status === "approved"
-        ? "Booking confirmed and approved!"
-        : status === "pending"
+      const message = status === "pending"
         ? "Booking submitted successfully. It is now pending Dean's Office / Coordinator review."
         : "Booking request rejected due to scheduling or venue constraints.";
 
@@ -236,6 +211,10 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    if (!["check", "submit", "approve", "cancel"].includes(body.action)) {
+      return apiError("Unsupported booking action.", 400);
+    }
+
     // 3. ACTION: APPROVE PENDING BOOKING (Admin / Coordinator only)
     if (body.action === "approve") {
       const requestId = body.request_id;
@@ -246,9 +225,9 @@ export async function POST(req: NextRequest) {
       }
 
       let userBookings: any[] = [];
-      if (fs.existsSync(userBookingsPath)) {
+      {
         try {
-          userBookings = JSON.parse(fs.readFileSync(userBookingsPath, "utf-8"));
+          userBookings = await readDurableJson<any[]>(userBookingsPath, []);
         } catch {
           userBookings = [];
         }
@@ -256,10 +235,16 @@ export async function POST(req: NextRequest) {
 
       const target = userBookings.find((b) => b.request_id === requestId);
       if (!target) return apiError(`Booking ${requestId} not found in pending records.`, 404);
+      if (String(target.requester || "").trim().toLowerCase() === String(requester || "").trim().toLowerCase()) {
+        return apiError("Governance violation: you cannot approve your own booking request.", 403);
+      }
+      if (target.status !== "pending") {
+        return apiError(`Only pending bookings can be approved (current status: ${target.status}).`, 409);
+      }
 
       target.status = "approved";
       target.reason = `Approved by ${requester} (${userRole}).`;
-      fs.writeFileSync(userBookingsPath, JSON.stringify(userBookings, null, 2), "utf-8");
+      await writeDurableJson(userBookingsPath, userBookings);
 
       // Also register in schedule.json
       if (!schedule.fest_week) schedule.fest_week = { bookings: [], session_overrides: [] };
@@ -278,7 +263,7 @@ export async function POST(req: NextRequest) {
           reason: target.reason,
         });
       }
-      fs.writeFileSync(schedPath, JSON.stringify(schedule, null, 2), "utf-8");
+      await writeDurableJson(schedPath, schedule);
 
       return NextResponse.json({
         success: true,
@@ -293,9 +278,9 @@ export async function POST(req: NextRequest) {
       if (!requestId) return apiError("Booking request_id is required.", 400);
 
       let userBookings: any[] = [];
-      if (fs.existsSync(userBookingsPath)) {
+      {
         try {
-          userBookings = JSON.parse(fs.readFileSync(userBookingsPath, "utf-8"));
+          userBookings = await readDurableJson<any[]>(userBookingsPath, []);
         } catch {
           userBookings = [];
         }
@@ -310,17 +295,16 @@ export async function POST(req: NextRequest) {
       }
 
       const bookingOwner = inUserBookings?.requester || inDatasetBookings?.requester || "Campus Club Member";
-      const bookingRole = inUserBookings?.role || inDatasetBookings?.role || "club";
 
       // Strict server-side permission check:
-      // Admin and Coordinator can cancel any booking.
-      // Other roles MUST provide requester and it MUST match the booking owner.
+      // Admin and Coordinator can cancel any booking. Everyone else must match
+      // the authenticated session name exactly; matching only a role is not ownership.
       const isAdminOrCoord = userRole === "admin" || userRole === "department_coordinator";
       if (!isAdminOrCoord) {
         if (!requester) {
           return apiError("Unauthorized: Requester identity is required to verify ownership before cancellation.", 401);
         }
-        const isOwner = (requester.toLowerCase() === bookingOwner.toLowerCase()) || (userRole === bookingRole);
+        const isOwner = requester.trim().toLowerCase() === String(bookingOwner || "").trim().toLowerCase();
         if (!isOwner) {
           return apiError(`Forbidden: You do not have permission to cancel another user's booking (owned by ${bookingOwner}).`, 403);
         }
@@ -330,14 +314,14 @@ export async function POST(req: NextRequest) {
       if (inUserBookings) {
         inUserBookings.status = "cancelled";
         inUserBookings.reason = `Booking cancelled by ${requester || userRole}.`;
-        fs.writeFileSync(userBookingsPath, JSON.stringify(userBookings, null, 2), "utf-8");
+        await writeDurableJson(userBookingsPath, userBookings);
       }
 
       // Mark CANCELLED (not "rejected"!) in schedule.json
       if (inSchedBookings) {
         inSchedBookings.status = "cancelled";
         inSchedBookings.reason = `Booking cancelled by ${requester || userRole}.`;
-        fs.writeFileSync(schedPath, JSON.stringify(schedule, null, 2), "utf-8");
+        await writeDurableJson(schedPath, schedule);
       }
 
       return NextResponse.json({

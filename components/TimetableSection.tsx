@@ -15,8 +15,10 @@ import {
   Zap,
   ArrowRight,
   Star,
+  HelpCircle,
 } from "lucide-react";
 import HeroBanner from "@/components/HeroBanner";
+import ExplainModal from "@/components/ExplainModal";
 
 /* ------------------------------------------------------------------ */
 /* Constants                                                           */
@@ -189,6 +191,7 @@ function CourseChip({
   highlighted,
   ariaWhen,
   compact = false,
+  onExplainSlot,
 }: {
   s: any;
   extra: number;
@@ -197,6 +200,7 @@ function CourseChip({
   highlighted: boolean;
   ariaWhen: string;
   compact?: boolean;
+  onExplainSlot?: () => void;
 }) {
   const tone = toneFor(s.course_id);
   const groups = (s.groups || []).join(", ");
@@ -207,11 +211,26 @@ function CourseChip({
       tabIndex={0}
       aria-label={`${s.course_title}, ${s.course_id}, ${s.room_name || s.room_id}, ${s.faculty_name}, ${ariaWhen}`}
       title={`${s.course_title} (${s.course_id})\n${s.faculty_name}\n${s.room_name || s.room_id}\n${groups}`}
-      className={`chip chip-${tone} h-full w-full ${compact ? "px-3 py-2.5" : "px-3 py-2"} flex flex-col justify-center text-left leading-snug focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/70 ${
+      className={`chip chip-${tone} h-full w-full ${compact ? "px-3 py-2.5" : "px-3 py-2"} flex flex-col justify-center text-left leading-snug focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/70 relative group ${
         dim ? "opacity-25" : ""
       } ${highlighted ? "ring-2 ring-blue-500 shadow-lg" : ""}`}
     >
-      <div className={`font-bold ${compact ? "text-[14px]" : "text-[12.5px]"} truncate`}>{s.course_title}</div>
+      <div className="flex items-center justify-between gap-1">
+        <div className={`font-bold ${compact ? "text-[14px]" : "text-[12.5px]"} truncate`}>{s.course_title}</div>
+        {onExplainSlot && (
+          <button
+            type="button"
+            title="Why this slot? (Constraint allocation proof)"
+            onClick={(e) => {
+              e.stopPropagation();
+              onExplainSlot();
+            }}
+            className="opacity-0 group-hover:opacity-100 hover:scale-110 transition p-0.5 rounded text-[var(--ink)]"
+          >
+            <HelpCircle className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
       <div className={`${compact ? "text-[12px]" : "text-[11px]"} opacity-70 truncate`}>({s.course_id})</div>
       <div className={`${compact ? "text-[12px]" : "text-[11px]"} font-semibold opacity-85 truncate`}>
         {third}
@@ -422,6 +441,7 @@ export default function TimetableSection({ isDark = false, searchQuery = "", onN
   const [weekOffset, setWeekOffset] = useState(0);
   const [mobileDay, setMobileDay] = useState(0);
   const [highlight, setHighlight] = useState<string | null>(null);
+  const [explainQuery, setExplainQuery] = useState<{ type: "booking_rejected" | "why_slot"; id: string } | null>(null);
 
   const entity = entities[dimension];
 
@@ -771,6 +791,7 @@ export default function TimetableSection({ isDark = false, searchQuery = "", onN
                             dim={!matches(x.session)}
                             highlighted={highlight === key}
                             ariaWhen={`${DAY_LONG[x.dayIndex]} ${sp.start} to ${ep.end}`}
+                            onExplainSlot={() => setExplainQuery({ type: "why_slot", id: x.session.session_id })}
                           />
                         </div>
                       );
@@ -854,6 +875,14 @@ export default function TimetableSection({ isDark = false, searchQuery = "", onN
           onNavigateTab={onNavigateTab}
         />
       </div>
+
+      {/* Decision Explanation Modal */}
+      <ExplainModal
+        isOpen={!!explainQuery}
+        onClose={() => setExplainQuery(null)}
+        query={explainQuery}
+        isDark={isDark}
+      />
     </div>
   );
 }

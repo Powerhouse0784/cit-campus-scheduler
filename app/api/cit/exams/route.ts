@@ -1,19 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import fs from "fs";
 import path from "path";
 import { ExamEngine } from "@/lib/exam-engine";
 import { apiError } from "@/lib/api-response";
+import { authorizeRoles, SCHEDULER_ROLES } from "@/lib/api-auth";
+import { readDurableJson, writeDurableJson } from "@/lib/durable-state";
 
 export async function GET(req: NextRequest) {
   try {
     const rootDir = process.cwd();
     const dataPath = path.join(rootDir, "data", "cit_public.json");
 
-    if (!fs.existsSync(dataPath)) {
-      return apiError("Dataset not found", 404);
-    }
-
-    const data = JSON.parse(fs.readFileSync(dataPath, "utf-8"));
+    const data = await readDurableJson<any>(dataPath, null);
+    if (!data) return apiError("Dataset not found", 404);
     const engine = new ExamEngine(data);
 
     const fullScheduledList = engine.generateSchedule();
@@ -67,22 +65,19 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  const auth = authorizeRoles(req, SCHEDULER_ROLES);
+  if (auth.ok === false) return auth.response;
   try {
     const rootDir = process.cwd();
     const dataPath = path.join(rootDir, "data", "cit_public.json");
     const schedPath = path.join(rootDir, "exports", "schedule.json");
 
-    if (!fs.existsSync(dataPath)) {
-      return apiError("Required dataset cit_public.json not found.", 404);
-    }
+    const data = await readDurableJson<any>(dataPath, null);
+    if (!data) return apiError("Required dataset cit_public.json not found.", 404);
 
-    if (!fs.existsSync(schedPath)) {
-      return apiError("Baseline schedule exports/schedule.json not found.", 404);
-    }
-
-    const data = JSON.parse(fs.readFileSync(dataPath, "utf-8"));
-    const schedule = JSON.parse(fs.readFileSync(schedPath, "utf-8"));
+    const schedule = await readDurableJson<any>(schedPath, null);
+    if (!schedule) return apiError("Baseline schedule exports/schedule.json not found.", 404);
 
     const engine = new ExamEngine(data);
 
@@ -112,7 +107,8 @@ export async function POST() {
 
     // 3. Safe commit only after 100% successful validation
     schedule.exams = candidateAssignments;
-    fs.writeFileSync(schedPath, JSON.stringify(schedule, null, 2), "utf-8");
+    await writeDurableJson(schedPath, schedule);
+    await writeDurableJson(path.join(rootDir, "exports", "schedule_baseline.json"), schedule);
 
     return NextResponse.json({
       success: true,

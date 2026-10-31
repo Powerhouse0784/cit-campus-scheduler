@@ -1,35 +1,32 @@
-import { NextResponse } from "next/server";
-import fs from "fs";
+import { NextRequest, NextResponse } from "next/server";
 import path from "path";
-import { citBackend } from "@/lib/cit-backend";
 import { apiError } from "@/lib/api-response";
+import { authorizeRoles, ADMIN_ROLES } from "@/lib/api-auth";
+import { deleteDurableJson, readDurableJson, writeDurableJson } from "@/lib/durable-state";
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  const auth = authorizeRoles(req, ADMIN_ROLES);
+  if (auth.ok === false) return auth.response;
   try {
-    const rootDir = process.cwd();
-    const spectraOverridesPath = path.join(rootDir, "data", "spectra_overrides.json");
-    if (fs.existsSync(spectraOverridesPath)) {
-      try {
-        fs.unlinkSync(spectraOverridesPath);
-      } catch {}
-    }
+    const root = process.cwd();
+    const baselinePath = path.join(root, "exports", "schedule_baseline.json");
+    const schedulePath = path.join(root, "exports", "schedule.json");
+    const baseline = await readDurableJson<any>(baselinePath, null);
+    if (!baseline) return apiError("Baseline schedule is missing; reset was not applied.", 404);
 
-    const spectraHistoryPath = path.join(rootDir, "data", "spectra_history.json");
-    if (fs.existsSync(spectraHistoryPath)) {
-      try {
-        fs.unlinkSync(spectraHistoryPath);
-      } catch {}
-    }
+    // Restore the active schedule first; clear transient records only after this succeeds.
+    await writeDurableJson(schedulePath, baseline);
+    await deleteDurableJson(path.join(root, "exports", "schedule_after.json"));
+    await deleteDurableJson(path.join(root, "data", "spectra_overrides.json"));
+    await deleteDurableJson(path.join(root, "data", "spectra_history.json"));
+    await deleteDurableJson(path.join(root, "data", "user_bookings.json"));
 
-    const userBookingsPath = path.join(rootDir, "data", "user_bookings.json");
-    if (fs.existsSync(userBookingsPath)) {
-      try {
-        fs.unlinkSync(userBookingsPath);
-      } catch {}
-    }
-
-    const result = citBackend.resetToBaseline();
-    return NextResponse.json({ success: true, data: result });
+    return NextResponse.json({
+      success: true,
+      message: "Restored the saved baseline schedule and cleared transient booking, Spectra history, and disruption state.",
+      dataset_id: baseline.dataset_id,
+      sessions_count: baseline.sessions?.length || 0,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to reset demo data.";
     return apiError(message, 500);

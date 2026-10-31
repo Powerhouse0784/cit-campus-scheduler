@@ -16,6 +16,10 @@ import {
   UserPlus,
   History,
   X,
+  Upload,
+  Download,
+  Database,
+  FileText,
   type LucideIcon,
 } from "lucide-react";
 
@@ -295,6 +299,33 @@ export default function SettingsRolesModule({
   const [updated, setUpdated] = useState("Oct 27, 2026 • 09:45 AM");
   const rolesRef = useRef<HTMLElement>(null);
   const tableRef = useRef<HTMLElement>(null);
+  const datasetInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingDataset, setUploadingDataset] = useState(false);
+
+  const handleUploadDataset = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setUploadingDataset(true);
+      const text = await file.text();
+      const json = JSON.parse(text);
+      const res = await fetch("/api/cit/dataset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dataset: json }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Failed to load custom dataset.");
+      }
+      setToast(data.message || "Custom dataset loaded & schedule generated!");
+    } catch (err: any) {
+      setToast(err.message || "Failed to load dataset.");
+    } finally {
+      setUploadingDataset(false);
+      if (datasetInputRef.current) datasetInputRef.current.value = "";
+    }
+  };
 
   useEffect(() => {
     const d = new Date();
@@ -492,6 +523,60 @@ export default function SettingsRolesModule({
 
         {/* ---------------- Right column ---------------- */}
         <aside className="space-y-5 sm:space-y-6 min-w-0 xl:pt-[40px]">
+          {/* Dataset Management & Exports */}
+          <section className={`${panel} p-5 space-y-3.5`} style={panelStyle} aria-label="Dataset management">
+            <div className="flex items-center justify-between">
+              <h2 className="font-heading font-extrabold text-[15px] flex items-center gap-2">
+                <Database className="w-4 h-4 text-blue-600 dark:text-sky-400" />
+                Dataset &amp; Exports
+              </h2>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                0 Hard Clashes
+              </span>
+            </div>
+            <p className="text-[11.5px] text-[var(--muted)] leading-relaxed">
+              Load custom competition datasets or download verified JSON schedules for official Python validator scoring.
+            </p>
+
+            <div className="space-y-2">
+              <input
+                ref={datasetInputRef}
+                type="file"
+                accept=".json"
+                onChange={handleUploadDataset}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => datasetInputRef.current?.click()}
+                disabled={uploadingDataset}
+                className="w-full py-2.5 px-3 rounded-xl border border-blue-500/30 text-blue-600 dark:text-sky-300 bg-blue-50/50 dark:bg-blue-950/30 hover:bg-blue-100/60 text-xs font-bold flex items-center justify-center gap-2 transition"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>{uploadingDataset ? "Loading Dataset..." : "Load Custom Dataset (.json)"}</span>
+              </button>
+
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <a
+                  href="/api/export"
+                  download="schedule.json"
+                  className="py-2 px-2.5 rounded-xl border border-[var(--border)] text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-[var(--row-hover)] text-[var(--ink)] transition"
+                >
+                  <Download className="w-3.5 h-3.5 text-blue-500" />
+                  <span>schedule.json</span>
+                </a>
+                <a
+                  href="/api/export?type=validation"
+                  download="validation_report.json"
+                  className="py-2 px-2.5 rounded-xl border border-[var(--border)] text-xs font-bold flex items-center justify-center gap-1.5 hover:bg-[var(--row-hover)] text-[var(--ink)] transition"
+                >
+                  <FileText className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>Audit Report</span>
+                </a>
+              </div>
+            </div>
+          </section>
+
           {/* System Status */}
           <section className={`${panel} p-5`} style={panelStyle} aria-label="System status">
             <h2 className="font-heading font-extrabold text-[16px]">System Status</h2>

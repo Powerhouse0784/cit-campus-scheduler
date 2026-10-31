@@ -30,6 +30,7 @@ import {
   Leaf,
   type LucideIcon,
 } from "lucide-react";
+import ExplainModal from "@/components/ExplainModal";
 
 interface SpectraEventsModuleProps {
   onNavigateTab?: (tab: string) => void;
@@ -143,6 +144,7 @@ export default function SpectraEventsModule({
   const [alternatives, setAlternatives] = useState<any[]>([]);
   const [loadingAlts, setLoadingAlts] = useState(false);
   const [showAlternatives, setShowAlternatives] = useState(false);
+  const [explainQuery, setExplainQuery] = useState<{ type: "booking_rejected" | "why_slot"; id: string } | null>(null);
 
   // Simulated identity switcher for testing Task 109 (Self-Approval)
   const [simulateIdentity, setSimulateIdentity] = useState<"standard" | "spectra_core">("standard");
@@ -1179,6 +1181,17 @@ export default function SpectraEventsModule({
                 </button>
               )}
 
+              {selectedEvent.status === "rejected" && (
+                <button
+                  type="button"
+                  onClick={() => setExplainQuery({ type: "booking_rejected", id: selectedEvent.id })}
+                  className="px-3.5 py-2 rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-300 dark:border-blue-800 hover:bg-blue-100 text-xs font-bold transition flex items-center gap-1.5"
+                >
+                  <HelpCircle className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Explain Rejection</span>
+                </button>
+              )}
+
               <div className="flex items-center gap-2 ml-auto">
                 {/* Reject Button (Task 106) */}
                 {canApproveOrReject && selectedEvent.status !== "rejected" && !showRejectForm && (
@@ -1287,6 +1300,14 @@ export default function SpectraEventsModule({
           </div>
         </div>
       )}
+
+      {/* Decision Explanation Modal */}
+      <ExplainModal
+        isOpen={!!explainQuery}
+        onClose={() => setExplainQuery(null)}
+        query={explainQuery}
+        isDark={isDark}
+      />
     </div>
   );
 }
