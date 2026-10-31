@@ -251,11 +251,18 @@ export async function POST(req: NextRequest) {
       fs.writeFileSync(schedPath, JSON.stringify(schedule, null, 2), "utf-8");
 
       // 3. Append to History Audit Log (Task 113)
+      // `status` is past-tense ("approved"); the audit log's `action` uses the verb form.
+      const actionByStatus: Record<typeof status, DecisionHistoryItem["action"]> = {
+        approved: "approve",
+        rejected: "reject",
+        cancelled: "cancel",
+        alternative_offered: "alternative_offered",
+      };
       const historyEntry: DecisionHistoryItem = {
         id: `HIST-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
         request_id: reqId,
         event_title: targetReq.title,
-        action: status,
+        action: actionByStatus[status],
         previous_status: previousStatus,
         new_status: status,
         by_user: currentUser,
