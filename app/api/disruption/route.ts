@@ -3,36 +3,67 @@ import fs from "fs";
 import path from "path";
 
 interface ChangeItem {
-  type: "faculty_unavailable" | "room_unavailable" | "add_faculty" | "add_session" | "remove_session";
+  type:
+    | "faculty_unavailable"
+    | "room_unavailable"
+    | "add_faculty"
+    | "add_session"
+    | "remove_session";
   [key: string]: any;
+}
+
+interface ScheduledSession {
+  session_id: string;
+  day: string;
+  start_period: number;
+  room_id: string;
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
+
     const baselinePath = path.join(process.cwd(), "exports", "schedule.json");
+    const afterFilePath = path.join(
+      process.cwd(),
+      "exports",
+      "schedule_after.json"
+    );
 
     if (!fs.existsSync(baselinePath)) {
-      return NextResponse.json({ error: "Baseline schedule.json not found." }, { status: 404 });
+      return NextResponse.json(
+        { error: "Baseline schedule.json not found." },
+        { status: 404 }
+      );
     }
 
     const baseline = JSON.parse(fs.readFileSync(baselinePath, "utf-8"));
     const dataPath = path.join(process.cwd(), "data", "cit_public.json");
     const citData = JSON.parse(fs.readFileSync(dataPath, "utf-8"));
 
-    // If custom change file was uploaded, use it. Otherwise use sample_disruption.json
     let disruption = body.disruption;
+
     if (!disruption) {
-      const disFilePath = path.join(process.cwd(), "data", "sample_disruption.json");
+      const disFilePath = path.join(
+        process.cwd(),
+        "data",
+        "sample_disruption.json"
+      );
+
       if (fs.existsSync(disFilePath)) {
         disruption = JSON.parse(fs.readFileSync(disFilePath, "utf-8"));
       } else {
-        return NextResponse.json({ error: "No disruption provided." }, { status: 400 });
+        return NextResponse.json(
+          { error: "No disruption provided." },
+          { status: 400 }
+        );
       }
     }
 
-    // Apply disruption changes
-    const newSessions = JSON.parse(JSON.stringify(baseline.sessions));
+    const newSessions = JSON.parse(
+      JSON.stringify(baseline.sessions)
+    ) as ScheduledSession[];
+
     const movedDetails: any[] = [];
 
     for (const ch of (disruption.changes || []) as ChangeItem[]) {
@@ -40,13 +71,16 @@ export async function POST(req: NextRequest) {
         for (const s of newSessions) {
           if (s.room_id === ch.room_id && ch.days.includes(s.day)) {
             const before = { ...s };
-            // Move to clean alternative room (CR-104 or LH-1)
+
             s.room_id = ch.room_id === "CR-102" ? "CR-104" : "CR-101";
+
             movedDetails.push({
               session_id: s.session_id,
               before,
               after: { ...s },
-              reason: ch.reason || `Room ${ch.room_id} unavailable on ${s.day}`,
+              reason:
+                ch.reason ||
+                `Room ${ch.room_id} unavailable on ${s.day}`,
             });
           }
         }
@@ -54,16 +88,26 @@ export async function POST(req: NextRequest) {
 
       if (ch.type === "faculty_unavailable") {
         for (const s of newSessions) {
-          // Check if session belongs to unavailable faculty
-          const sessMeta = citData.sessions.find((cs: any) => cs.id === s.session_id);
-          if (sessMeta && sessMeta.faculty_id === ch.faculty_id && ch.days.includes(s.day)) {
+          const sessMeta = citData.sessions.find(
+            (cs: any) => cs.id === s.session_id
+          );
+
+          if (
+            sessMeta &&
+            sessMeta.faculty_id === ch.faculty_id &&
+            ch.days.includes(s.day)
+          ) {
             const before = { ...s };
+
             s.day = s.day === "MON" ? "TUE" : "WED";
+
             movedDetails.push({
               session_id: s.session_id,
               before,
               after: { ...s },
-              reason: ch.reason || `Faculty ${ch.faculty_id} unavailable on ${before.day}`,
+              reason:
+                ch.reason ||
+                `Faculty ${ch.faculty_id} unavailable on ${before.day}`,
             });
           }
         }
@@ -71,24 +115,34 @@ export async function POST(req: NextRequest) {
 
       if (ch.type === "add_session") {
         const added = ch.session;
-        newSessions.push({
+
+        const newSession: ScheduledSession = {
           session_id: added.id,
           day: added.fixed_slot ? added.fixed_slot.day : "WED",
-          start_period: added.fixed_slot ? added.fixed_slot.start_period : 1,
+          start_period: added.fixed_slot
+            ? added.fixed_slot.start_period
+            : 1,
           room_id: "CR-101",
-        });
+        };
+
+        newSessions.push(newSession);
+
         movedDetails.push({
           session_id: added.id,
           before: null,
-          after: { session_id: added.id, day: "WED", start_period: 1, room_id: "CR-101" },
+          after: newSession,
           reason: "New session added to curriculum",
         });
       }
 
       if (ch.type === "remove_session") {
-        const idx = newSessions.findIndex((s: any) => s.session_id === ch.session_id);
+        const idx = newSessions.findIndex(
+          (s) => s.session_id === ch.session_id
+        );
+
         if (idx !== -1) {
           const removed = newSessions.splice(idx, 1)[0];
+
           movedDetails.push({
             session_id: ch.session_id,
             before: removed,
@@ -104,9 +158,11 @@ export async function POST(req: NextRequest) {
       sessions: newSessions,
     };
 
-    // Save repaired timetable
-    const afterFilePath = path.join(process.cwd(), "exports", "schedule_after.json");
-    fs.writeFileSync(afterFilePath, JSON.stringify(scheduleAfter, null, 2), "utf-8");
+    fs.writeFileSync(
+      afterFilePath,
+      JSON.stringify(scheduleAfter, null, 2),
+      "utf-8"
+    );
 
     return NextResponse.json({
       status: "success",

@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Sidebar from "@/components/Sidebar";
 import TopNavbar from "@/components/TopNavbar";
 import DashboardModule from "@/components/DashboardModule";
+import HeroBanner from "@/components/HeroBanner";
 import TimetableSection from "@/components/TimetableSection";
 import VenueBookingSection from "@/components/VenueBookingSection";
 import SpectraEventsModule from "@/components/SpectraEventsModule";
@@ -28,6 +29,7 @@ export default function Home() {
 
   const toggleTheme = () => {
     setIsDark(!isDark);
+
     if (!isDark) {
       document.documentElement.setAttribute("data-theme", "dark");
     } else {
@@ -36,7 +38,9 @@ export default function Home() {
   };
 
   const handleResetData = () => {
-    alert("Reset completed: Timetable and demo states restored to clean baseline.");
+    alert(
+      "Reset completed: Timetable and demo states restored to clean baseline."
+    );
   };
 
   return (
@@ -52,29 +56,36 @@ export default function Home() {
 
       {/* Main Container */}
       <main className="flex-1 p-5 md:p-8 max-w-[1600px] mx-auto w-full space-y-6 overflow-y-auto">
-        {/* Top Navbar */}
         <TopNavbar isDark={isDark} toggleTheme={toggleTheme} role={role} />
 
-        {/* 1. DASHBOARD OVERVIEW */}
+        {/* Dashboard Overview */}
         {activeTab === "dashboard" && (
-          <DashboardModule
-            onNavigateTab={(tab) => setActiveTab(tab)}
-            userRole={role}
-            isDark={isDark}
-          />
+          <div className="space-y-6">
+            <HeroBanner
+              title="Good Morning, Ritik! 👋"
+              subtitle="Welcome to CIT Campus Scheduler · Smart Scheduling. A Better Campus."
+              eyebrow="Week 07 · Semester Overview"
+              badge="0 Hard Conflicts"
+              type="dashboard"
+            />
+
+            <DashboardModule
+              onNavigateTab={(tab) => setActiveTab(tab)}
+              userRole={role}
+              isDark={isDark}
+            />
+          </div>
         )}
 
-        {/* 2. TIMETABLE TAB */}
+        {/* Timetable */}
         {activeTab === "timetable" && (
           <TimetableSection scheduleData={scheduleData} />
         )}
 
-        {/* 3. VENUES TAB */}
-        {activeTab === "venues" && (
-          <VenueBookingSection />
-        )}
+        {/* Venues */}
+        {activeTab === "venues" && <VenueBookingSection />}
 
-        {/* 4. SPECTRA EVENTS TAB */}
+        {/* Spectra Events */}
         {activeTab === "spectra" && (
           <SpectraEventsModule
             onNavigateTab={(tab) => setActiveTab(tab)}
@@ -82,17 +93,13 @@ export default function Home() {
           />
         )}
 
-        {/* 5. RESCHEDULING STUDIO TAB */}
-        {activeTab === "changes" && (
-          <ReschedulingStudioModule />
-        )}
+        {/* Rescheduling Studio */}
+        {activeTab === "changes" && <ReschedulingStudioModule />}
 
-        {/* 6. MIDSEM EXAMS TAB */}
-        {activeTab === "exams" && (
-          <ExamsModule />
-        )}
+        {/* Exams */}
+        {activeTab === "exams" && <ExamsModule />}
 
-        {/* 7. AI ASSISTANT TAB */}
+        {/* AI Assistant */}
         {activeTab === "ai" && (
           <AiAssistantModule
             onNavigateTab={(tab) => setActiveTab(tab)}
@@ -100,7 +107,7 @@ export default function Home() {
           />
         )}
 
-        {/* 8. ANALYTICS & CONFLICTS TAB */}
+        {/* Analytics & Conflicts */}
         {activeTab === "analytics" && (
           <AnalyticsConflictsModule
             onNavigateTab={(tab) => setActiveTab(tab)}
@@ -108,7 +115,7 @@ export default function Home() {
           />
         )}
 
-        {/* 9. SETTINGS & ROLE MANAGEMENT TAB */}
+        {/* Settings */}
         {activeTab === "settings" && (
           <SettingsRolesModule
             onNavigateTab={(tab) => setActiveTab(tab)}
