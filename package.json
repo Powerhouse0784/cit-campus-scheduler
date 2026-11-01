@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "validate:schedule": "python validator.py --data data/cit_public.json --schedule exports/schedule.json",
     "validate:disruption": "python validator.py --data data/cit_public.json --schedule exports/schedule_after.json --disruption data/sample_disruption.json --baseline exports/schedule.json",
-    "verify:release": "node scripts/verify-release.mjs"
+    "verify:release": "node scripts/verify-release.mjs",
+    "smoke:api": "node scripts/smoke-api.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

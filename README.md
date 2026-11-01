@@ -20,6 +20,19 @@ A Next.js application for campus timetable viewing, room/event booking, Spectra 
 
 Local development can use the checked-in sample JSON files as a fallback when Supabase credentials are not configured. Production writes require configured Supabase storage; booking transitions require the matching RPC migration.
 
+## Demo accounts
+
+These built-in accounts are for local/demo evaluation only; do not reuse these passwords in a public production deployment. Configure a strong `CIT_AUTH_SECRET` for any hosted demo.
+
+| Role | Email | Password |
+|---|---|---|
+| Admin (Dean's Office) | `admin@cit.edu` | `CITAdmin2024!` |
+| Department Coordinator | `coordinator@cit.edu` | `CITCoord2024!` |
+| Faculty | `faculty@cit.edu` | `CITFaculty2024!` |
+| Club Representative | `clubrep@cit.edu` | `CITClub2024!` |
+
+Admin demo reset: use the Admin-only reset control in the app, backed by `POST /api/cit/reset`. It restores the saved baseline schedule and clears transient booking/Spectra/disruption records. Verify the button and database behavior in the deployed environment before judging.
+
 ## Environment variables
 
 - `SUPABASE_URL`: server-side Supabase project URL.
@@ -71,3 +84,15 @@ Server-side Supabase keys must never be exposed through `NEXT_PUBLIC_*` variable
 ### Release smoke checks
 
 Run `npm run verify:release` before packaging a submission. This checks required deliverables, confirms key booking/rescheduling safeguards are present, and runs the official baseline and disruption validators. It does **not** replace `npm run typecheck`, `npm run build`, the Supabase SQL smoke test, or a live concurrent-booking test; those still need to be run in the configured environment.
+
+
+## Known limitations / release caveats
+
+- The included credentials are static demo accounts, not a production identity provider; rotate or replace them before real-world use.
+- Live Supabase persistence, SQL RPC permissions, reset behavior, and concurrent booking behavior must be tested against the target Supabase project.
+- `npm run verify:release` and the official validator do not replace `npm run typecheck`, `npm run build`, browser-based role checks, or deployed smoke tests.
+- The schedule generator is deterministic and heuristic; a successful result is validated, but the search is not guaranteed to find a globally optimal schedule.
+
+### Live API smoke checks
+
+With the app already running (`npm run dev` or `npm run start`), run `npm run smoke:api`. The script checks that public read endpoints respond and that booking writes, dataset writes, and demo reset reject unauthenticated requests. For a deployed instance, set `BASE_URL=https://your-host.example` before running it. These checks do not replace authenticated end-to-end tests for each role.

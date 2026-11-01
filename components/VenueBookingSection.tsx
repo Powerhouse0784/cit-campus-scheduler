@@ -18,6 +18,8 @@ import {
   Users,
   XCircle,
 } from "lucide-react";
+import CountUp from "@/components/ui/CountUp";
+import Skeleton from "@/components/ui/Skeleton";
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -378,7 +380,7 @@ function StatCard({
       </span>
       <div className="relative leading-tight min-w-0">
         <div className="hidden sm:block text-[14px] font-semibold text-[var(--ink)]/90">{label}</div>
-        <div className="font-heading font-extrabold text-[22px] sm:text-[30px] leading-none sm:mt-1">{value}</div>
+        <div className="font-heading font-extrabold text-[22px] sm:text-[30px] leading-none sm:mt-1">{typeof value === "number" ? <CountUp value={value} /> : value}</div>
         <div className="sm:hidden text-[12px] font-medium text-[var(--muted)] mt-0.5">{shortLabel}</div>
       </div>
     </div>
@@ -697,7 +699,7 @@ export default function VenueBookingSection({
     <div className="space-y-4">
       {/* ---------------- Hero ---------------- */}
       <section
-        className="relative overflow-hidden rounded-[20px] text-white min-h-[150px] sm:min-h-[168px] flex items-center"
+        className="hero-sheen relative overflow-hidden rounded-[20px] text-white min-h-[150px] sm:min-h-[168px] flex items-center"
         style={{
           background: isDark
             ? "linear-gradient(100deg,#030B1F 0%,#07153A 45%,#0B1F58 100%)"
@@ -706,21 +708,21 @@ export default function VenueBookingSection({
         }}
       >
         <div
-          className="hero-img absolute bottom-0 right-0 h-[60%] w-full sm:h-full sm:w-[74%] bg-cover bg-[position:72%_100%] sm:bg-right transition-[background-image] duration-300"
+          className="hero-img hero-kenburns absolute bottom-0 right-0 h-[60%] w-full sm:h-full sm:w-[74%] bg-cover bg-[position:72%_100%] sm:bg-right transition-[background-image] duration-300"
           style={{ backgroundImage: `url(/images/hero-campus-${isDark ? "dark" : "light"}.jpg)` }}
           role="img"
           aria-label="CIT campus building"
         />
 
         <div className="relative z-10 px-5 py-5 sm:px-9 max-w-[620px]">
-          <span className="hidden sm:inline-block px-3 py-1 rounded-full border border-white/35 bg-white/10 backdrop-blur-sm text-[11.5px] font-semibold text-white/95">
+          <span className="anim-fade-up hidden sm:inline-block px-3 py-1 rounded-full border border-white/35 bg-white/10 backdrop-blur-sm text-[11.5px] font-semibold text-white/95">
             Smart Campus · Smart Bookings
           </span>
-          <h1 className="font-serif-heading font-bold tracking-tight text-[30px] sm:text-[46px] leading-[1.05] sm:mt-2.5">
+          <h1 style={{ "--i": 1 } as React.CSSProperties} className="anim-fade-up font-serif-heading font-bold tracking-tight text-[30px] sm:text-[46px] leading-[1.05] sm:mt-2.5">
             Venue Booking
           </h1>
-          <p className="font-heading font-extrabold text-[14px] sm:text-[22px] mt-1.5">Book. Manage. Celebrate.</p>
-          <p className="hidden sm:block mt-1 text-[13.5px] font-medium text-white/90">
+          <p style={{ "--i": 2 } as React.CSSProperties} className="anim-fade-up font-heading font-extrabold text-[14px] sm:text-[22px] mt-1.5">Book. Manage. Celebrate.</p>
+          <p style={{ "--i": 3 } as React.CSSProperties} className="anim-fade-up hidden sm:block mt-1 text-[13.5px] font-medium text-white/90">
             From classrooms to the auditorium — all in one place.
           </p>
           <svg viewBox="0 0 150 10" className="mt-1.5 w-24 sm:w-36 h-2" aria-hidden="true">
@@ -1001,7 +1003,7 @@ export default function VenueBookingSection({
             {/* Mascot */}
             <div className="hidden sm:block relative w-[168px] shrink-0 -mb-3 -mr-1" aria-hidden="true">
               <div
-                className="absolute top-0 right-2 z-10 max-w-[150px] rounded-2xl px-3 py-1.5 text-[11.5px] font-semibold italic leading-snug"
+                className="anim-pop absolute top-0 right-2 z-10 max-w-[150px] rounded-2xl px-3 py-1.5 text-[11.5px] font-semibold italic leading-snug"
                 style={{
                   background: isDark ? "#10234A" : "#DCE9FF",
                   color: isDark ? "#CFE0FF" : "#1E4FC4",
@@ -1010,7 +1012,7 @@ export default function VenueBookingSection({
               >
                 Just tell me what you need!
               </div>
-              <div className="pt-8">
+              <div className="pt-8 anim-float">
                 <RobotMascot />
               </div>
             </div>
@@ -1019,7 +1021,7 @@ export default function VenueBookingSection({
           {/* Status + availability result */}
           <div className="mt-3 space-y-3" aria-live="polite">
             {statusMessage && (
-              <div className={`p-3 rounded-xl border text-[13px] font-semibold flex items-start gap-2 ${statusStyles[statusMessage.type]}`}>
+              <div className={`anim-pop p-3 rounded-xl border text-[13px] font-semibold flex items-start gap-2 ${statusStyles[statusMessage.type]}`}>
                 {statusMessage.type === "success" ? (
                   <CheckCircle2 className="w-4 h-4 shrink-0 mt-px text-emerald-600" />
                 ) : (
@@ -1030,7 +1032,7 @@ export default function VenueBookingSection({
             )}
 
             {checkResult && (
-              <div className="rounded-2xl border p-3.5 space-y-3" style={{ borderColor: "var(--border)", background: "var(--bg)" }}>
+              <div className="anim-pop rounded-2xl border p-3.5 space-y-3" style={{ borderColor: "var(--border)", background: "var(--bg)" }}>
                 <div>
                   <p className="text-[12px] font-semibold text-[var(--muted)]">Review the extracted details before submitting.</p>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -1143,7 +1145,12 @@ export default function VenueBookingSection({
           </div>
 
           {!loaded && (
-            <p className="py-10 text-center text-[13px] font-semibold text-[var(--muted)]">Checking venue availability…</p>
+            <div className="mt-3.5 grid grid-cols-3 gap-3" role="status" aria-label="Checking venue availability">
+              {[0, 1, 2].map((i) => (
+                <Skeleton key={i} className="h-[170px]" />
+              ))}
+              <span className="sr-only">Checking venue availability…</span>
+            </div>
           )}
           {loaded && shownVenues.length === 0 && (
             <p className="py-10 text-center text-[13px] font-semibold text-[var(--muted)]">
@@ -1163,7 +1170,7 @@ export default function VenueBookingSection({
               return (
                 <article
                   key={v.id}
-                  className={`rounded-2xl border p-2 flex flex-col ${showAll ? "" : "min-w-[78%] sm:min-w-0 snap-start"}`}
+                  className={`rounded-2xl border p-2 flex flex-col transition-transform duration-200 hover:-translate-y-1 ${showAll ? "" : "min-w-[78%] sm:min-w-0 snap-start"}`}
                   style={{ background: "var(--surface)", borderColor: "var(--border)", boxShadow: "0 6px 18px rgba(25,55,115,.06)" }}
                 >
                   <div className="h-[82px] rounded-xl overflow-hidden">

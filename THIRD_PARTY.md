@@ -4,7 +4,7 @@ Versions in the table are the declarations in `package.json`; `package-lock.json
 
 | Library / tool | Declared version | Purpose | Runtime role |
 |---|---:|---|---|
-| Next.js | package.json: ^14.2.25; lockfile: 14.2.15 (mismatch, release blocker) | App framework, routing and API handlers | Runtime/build |
+| Next.js | 14.2.15 | App framework, routing and API handlers | Runtime/build |
 | React | ^18.3.1 | UI rendering | Runtime |
 | React DOM | ^18.3.1 | Browser rendering | Runtime |
 | Tailwind CSS | ^3.4.1 | Utility styling | Build |

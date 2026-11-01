@@ -25,6 +25,7 @@ for (const file of [
   'supabase/migrations/202611010001_cit_app_state.sql',
   'supabase/migrations/202611010002_atomic_booking_workflow.sql',
   'supabase/tests/atomic_booking_workflow.sql', 'SPECTRA_ACCESS_HARDENING.md',
+  'scripts/smoke-api.mjs',
 ]) check(`required file: ${file}`, existsSync(path.join(root, file)));
 
 check('booking submit is atomically persisted', fileContains('app/api/cit/bookings/route.ts', ['submitBookingAtomically', 'requester_id', 'status = "pending"']).ok,
@@ -39,6 +40,12 @@ check('Spectra POST rejects guest/student sessions before loading booking detail
   fileContains('app/api/cit/spectra/route.ts', ['decision lookups as well as mutations', 'if (session.role === "student")', 'status: 401']).detail);
 check('Spectra approval retains admin/coordinator and self-approval guards', fileContains('app/api/cit/spectra/route.ts', ['Only Admin or Department Coordinator accounts may approve events.', 'Nobody can approve their own request']).ok,
   fileContains('app/api/cit/spectra/route.ts', ['Only Admin or Department Coordinator accounts may approve events.', 'Nobody can approve their own request']).detail);
+check('demo reset is restricted to admin roles and restores baseline', fileContains('app/api/cit/reset/route.ts', ['authorizeRoles(req, ADMIN_ROLES)', 'schedule_baseline.json', 'Restored the saved baseline schedule']).ok,
+  fileContains('app/api/cit/reset/route.ts', ['authorizeRoles(req, ADMIN_ROLES)', 'schedule_baseline.json', 'Restored the saved baseline schedule']).detail);
+check('README documents all four demo accounts and limitations', fileContains('README.md', ['admin@cit.edu', 'coordinator@cit.edu', 'faculty@cit.edu', 'clubrep@cit.edu', '## Known limitations']).ok,
+  fileContains('README.md', ['admin@cit.edu', 'coordinator@cit.edu', 'faculty@cit.edu', 'clubrep@cit.edu', '## Known limitations']).detail);
+check('AI rescheduling never fabricates a default faculty member', fileContains('app/api/ai/assistant/route.ts', ['resolveFaculty(rawPrompt', 'reschedule_needs_clarification', 'exact faculty name or ID']).ok && !readFileSync(path.join(root, 'app/api/ai/assistant/route.ts'), 'utf8').includes('faculty_id: "F01"'));
+check('AI rescheduling requires an explicit weekday and period range', fileContains('app/api/ai/assistant/route.ts', ['resolveRequestedDay(rawPrompt)', 'resolveRequestedPeriods(rawPrompt)', 'room_unavailable']).ok);
 for (const file of ['app/api/cit/stats/route.ts', 'app/api/schedule/route.ts', 'app/api/cit/timetable/route.ts']) {
   const result = fileContains(file, ['export const dynamic = "force-dynamic"']);
   check(`dynamic API route: ${file}`, result.ok, result.detail);
@@ -56,6 +63,7 @@ for (const [label, args] of [
 
 const pkg = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
 check('release verification script is wired into package.json', pkg.scripts?.['verify:release'] === 'node scripts/verify-release.mjs');
+check('live API smoke test is wired into package.json', pkg.scripts?.['smoke:api'] === 'node scripts/smoke-api.mjs');
 
 console.log(`\nRelease checks: ${checks.filter((c) => c.ok).length}/${checks.length} passed.`);
 if (failures.length) {

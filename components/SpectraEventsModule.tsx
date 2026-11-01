@@ -10,12 +10,8 @@ import {
   ChevronDown,
   ArrowRight,
   CheckCircle2,
-  Ticket,
-  FileText,
   X,
-  AlertTriangle,
   Search,
-  Filter,
   RefreshCw,
   ShieldAlert,
   ShieldCheck,
@@ -28,6 +24,9 @@ import {
   Sparkles,
   History,
   Leaf,
+  Grid,
+  Columns,
+  Info,
   type LucideIcon,
 } from "lucide-react";
 import ExplainModal from "@/components/ExplainModal";
@@ -85,7 +84,44 @@ const STATUS_LABEL: Record<string, string> = {
 
 const AVATAR_TONES = ["from-[#F59E8B] to-[#C2410C]", "from-[#8FB4F5] to-[#1D4ED8]", "from-[#86D9B5] to-[#047857]"];
 
-/** Priority label from the server's priority weight (never colour alone: text + icon). */
+// Priority Color Themes (Matching CIT Section 4 Priority Hierarchy)
+const CATEGORY_STYLES: Record<
+  string,
+  { label: string; bg: string; text: string; border: string; dot: string }
+> = {
+  institute_event: {
+    label: "Institute Event (Weight 10)",
+    bg: "bg-purple-100 dark:bg-purple-950/70",
+    text: "text-purple-900 dark:text-purple-200",
+    border: "border-purple-300 dark:border-purple-800",
+    dot: "bg-purple-600",
+  },
+  guest_lecture: {
+    label: "Guest Lecture (Weight 8)",
+    bg: "bg-blue-100 dark:bg-blue-950/70",
+    text: "text-blue-900 dark:text-blue-200",
+    border: "border-blue-300 dark:border-blue-800",
+    dot: "bg-blue-600",
+  },
+  department_event: {
+    label: "Department Event (Weight 5)",
+    bg: "bg-teal-100 dark:bg-teal-950/70",
+    text: "text-teal-900 dark:text-teal-200",
+    border: "border-teal-300 dark:border-teal-800",
+    dot: "bg-teal-600",
+  },
+  club_event: {
+    label: "Club Event (Weight 2)",
+    bg: "bg-amber-100 dark:bg-amber-950/70",
+    text: "text-amber-900 dark:text-amber-200",
+    border: "border-amber-300 dark:border-amber-800",
+    dot: "bg-amber-600",
+  },
+};
+
+const PERIODS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
+const DAYS = ["MON", "TUE", "WED", "THU", "FRI"];
+
 function priorityInfo(weight: number): { label: string; Icon: LucideIcon; cls: string } {
   if (weight >= 8)
     return { label: "High Priority", Icon: Flame, cls: "bg-[#FFE3E0] text-[#C2260F] dark:bg-[#4A1A16] dark:text-[#FF9A8A]" };
@@ -94,7 +130,6 @@ function priorityInfo(weight: number): { label: string; Icon: LucideIcon; cls: s
   return { label: "Low Priority", Icon: Flame, cls: "bg-[#FFE8D2] text-[#B45309] dark:bg-[#4A3016] dark:text-[#FFC27A]" };
 }
 
-/** Artwork for a card, picked from the event title / category. */
 function eventImage(ev: { title: string; category: string }): string {
   const t = ev.title.toLowerCase();
   if (/(game|gaming|esport|code|hack|sprint|quiz|robo|sport|tournament)/.test(t)) return "/images/spectra/gaming.jpg";
@@ -117,12 +152,16 @@ export default function SpectraEventsModule({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // View Mode: 'timeline' (Day-wise Venue Timeline) vs 'cards' (All Event Cards)
+  const [viewMode, setViewMode] = useState<"timeline" | "cards">("timeline");
+  const [selectedVenue, setSelectedVenue] = useState<string>("AUD");
+
   // Filters & Sorting
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [activeStatus, setActiveStatus] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<"priority" | "id" | "attendance" | "day">("priority");
-  
+
   // Bookmarks
   const [bookmarked, setBookmarked] = useState<Record<string, boolean>>({
     "BR-01": true,
@@ -160,7 +199,6 @@ export default function SpectraEventsModule({
     }
   }, [userRole, simulateIdentity]);
 
-  // Synchronize simulated identity with server session (Task 109 server check)
   const toggleSimulateIdentity = async () => {
     const nextVal = simulateIdentity === "standard" ? "spectra_core" : "standard";
     setSimulateIdentity(nextVal);
@@ -178,7 +216,6 @@ export default function SpectraEventsModule({
     } catch {}
   };
 
-  // Fetch events & history from /api/cit/spectra
   const fetchSpectraEvents = async () => {
     try {
       setLoading(true);
@@ -198,7 +235,6 @@ export default function SpectraEventsModule({
     }
   };
 
-  // Load alternative venues and times (Tasks 107 & 108)
   const loadAlternativesForEvent = async (ev: SpectraEvent) => {
     setLoadingAlts(true);
     setAlternatives([]);
@@ -220,7 +256,6 @@ export default function SpectraEventsModule({
     }
   };
 
-  // Submit Alternative Decision (Tasks 107 & 108)
   const handleOfferAlternative = async (alt: any) => {
     if (!selectedEvent) return;
     setActionLoading(true);
@@ -279,7 +314,6 @@ export default function SpectraEventsModule({
     setBookmarked((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  // Status Badge Colors
   const getStatusBadgeStyle = (status: string) => {
     switch (status) {
       case "approved":
@@ -295,37 +329,6 @@ export default function SpectraEventsModule({
     }
   };
 
-  // Category Badge Colors
-  const getCategoryBadgeStyle = (category: string) => {
-    switch (category) {
-      case "institute_event":
-        return "bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300 border-purple-200";
-      case "guest_lecture":
-        return "bg-blue-100 text-blue-800 dark:bg-blue-950/70 dark:text-blue-300 border-blue-200";
-      case "department_event":
-        return "bg-teal-100 text-teal-800 dark:bg-teal-950/70 dark:text-teal-300 border-teal-200";
-      case "club_event":
-      default:
-        return "bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border-amber-200";
-    }
-  };
-
-  // Category Gradient Backgrounds
-  const getCardHeaderGradient = (category: string) => {
-    switch (category) {
-      case "institute_event":
-        return "from-purple-900 via-indigo-900 to-blue-900";
-      case "guest_lecture":
-        return "from-blue-950 via-sky-900 to-indigo-950";
-      case "department_event":
-        return "from-teal-950 via-emerald-950 to-cyan-950";
-      case "club_event":
-      default:
-        return "from-amber-950 via-rose-950 to-indigo-950";
-    }
-  };
-
-  // Filtered & Sorted Events
   const filteredEvents = useMemo(() => {
     return events
       .filter((ev) => {
@@ -353,13 +356,11 @@ export default function SpectraEventsModule({
       });
   }, [events, activeCategory, activeStatus, searchQuery, sortBy]);
 
-  // "My Bookings": the signed-in user's own requests (falls back to the first three)
   const myBookings = useMemo(() => {
     const mine = events.filter((e) => e.requester.toLowerCase() === currentUserName.toLowerCase());
     return (mine.length ? mine : events).slice(0, 3);
   }, [events, currentUserName]);
 
-  // Governance Actions (Approve, Reject, Cancel)
   const handleGovernanceAction = async (action: "approve" | "reject" | "cancel") => {
     if (!selectedEvent) return;
     setActionLoading(true);
@@ -386,8 +387,7 @@ export default function SpectraEventsModule({
       setActionNotice({ type: "success", text: data.message });
       setShowRejectForm(false);
       setRejectReasonInput("");
-      
-      // Update local state
+
       setEvents((prev) =>
         prev.map((e) =>
           e.requestId === selectedEvent.requestId
@@ -396,10 +396,9 @@ export default function SpectraEventsModule({
         )
       );
       if (selectedEvent) {
-        setSelectedEvent((prev) => prev ? { ...prev, status: data.status } : null);
+        setSelectedEvent((prev) => (prev ? { ...prev, status: data.status } : null));
       }
 
-      // Refresh metrics from server
       fetchSpectraEvents();
     } catch (err) {
       setActionNotice({
@@ -411,21 +410,21 @@ export default function SpectraEventsModule({
     }
   };
 
-  // Self-approval check for current user
   const isSelfApproval = Boolean(
     selectedEvent &&
-    ((currentUserName && selectedEvent.requester && currentUserName.toLowerCase() === selectedEvent.requester.toLowerCase()) ||
-     (userRole === "admin" && simulateIdentity === "spectra_core" && selectedEvent.requestId === "BR-01"))
+      ((currentUserName && selectedEvent.requester && currentUserName.toLowerCase() === selectedEvent.requester.toLowerCase()) ||
+        (userRole === "admin" && simulateIdentity === "spectra_core" && selectedEvent.requestId === "BR-01"))
   );
 
   const canApproveOrReject = userRole === "admin" || userRole === "department_coordinator";
-  const canCancel = canApproveOrReject || (selectedEvent && currentUserName.toLowerCase() === selectedEvent.requester.toLowerCase());
+  const canCancel =
+    canApproveOrReject || (selectedEvent && currentUserName.toLowerCase() === selectedEvent.requester.toLowerCase());
 
   return (
     <div className="space-y-6">
       {/* 1. HERO */}
       <section
-        className="relative overflow-hidden rounded-[22px] text-white min-h-[210px] md:min-h-[170px] lg:min-h-[176px] flex items-start md:items-center"
+        className="relative overflow-hidden rounded-[22px] text-white min-h-[200px] flex items-center p-6"
         style={{
           background: isDark
             ? "linear-gradient(100deg,#040A2A 0%,#0A1566 45%,#2E2AA8 100%)"
@@ -441,35 +440,41 @@ export default function SpectraEventsModule({
           role="img"
           aria-label="Festival crowd in front of the CIT campus"
         />
-        <div className="relative z-10 px-5 pt-5 pb-4 sm:px-8 md:py-0 max-w-[560px]">
-          <h1 className="font-serif-heading font-bold tracking-tight text-[30px] sm:text-[40px] leading-[1.05]">
-            Spectra Events
-          </h1>
-          <p className="mt-1.5 font-heading font-extrabold text-[15px] sm:text-[19px]">Book. Approve. Celebrate.</p>
-          <p className="mt-1 text-[12.5px] sm:text-[14px] font-medium text-white/90">
-            From college fests to club events — all in one place.
-          </p>
-          <button
-            onClick={() => document.getElementById("spectra-events-grid")?.scrollIntoView({ behavior: "smooth" })}
-            className="mt-3.5 inline-flex items-center gap-2 h-9 px-5 rounded-full text-[13px] font-bold text-white border border-sky-300/70 bg-[#0B2A9A]/80 hover:bg-[#1239B8] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-300"
-            style={{ boxShadow: "0 0 16px rgba(110,130,255,.5)" }}
-          >
-            Explore Events <ArrowRight className="w-4 h-4" strokeWidth={2.5} />
-          </button>
-        </div>
-        <div className="hidden lg:block absolute right-8 top-1/2 -translate-y-1/2 -rotate-6 text-right z-10 pointer-events-none">
-          <div className="font-serif-heading italic font-semibold text-[30px] leading-[1.02] [text-shadow:0_2px_10px_rgba(0,10,70,.95)]">
-            Campus
-            <br />
-            Comes Alive!
+        <div className="relative z-10 max-w-[620px] space-y-2">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-xs font-bold text-sky-200">
+            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+            <span>Week 7 Tech Fest &bull; Spectra &apos;27 Governance Hub</span>
           </div>
-          <svg viewBox="0 0 150 10" className="ml-auto mt-1 w-28 h-2.5" aria-hidden="true">
-            <path d="M3 7C40 2 100 2 147 5" stroke="#F5B731" strokeWidth="2.8" strokeLinecap="round" fill="none" />
-          </svg>
+          <h1 className="font-serif-heading font-bold text-3xl sm:text-4xl tracking-tight">
+            Spectra Festival Bookings
+          </h1>
+          <p className="text-xs sm:text-sm text-white/90 font-medium">
+            Day-Wise Auditorium &amp; Venue Timelines, Priority Color Coding, and Transparent Decision Reasons.
+          </p>
+
+          {/* Priority Color Legend Strip */}
+          <div className="flex flex-wrap items-center gap-2 pt-2 text-xs">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-500/25 border border-purple-300/30 text-purple-200 font-bold">
+              <span className="w-2 h-2 rounded-full bg-purple-400" />
+              Institute Event (10)
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-500/25 border border-blue-300/30 text-blue-200 font-bold">
+              <span className="w-2 h-2 rounded-full bg-blue-400" />
+              Guest Lecture (8)
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-teal-500/25 border border-teal-300/30 text-teal-200 font-bold">
+              <span className="w-2 h-2 rounded-full bg-teal-400" />
+              Department Event (5)
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/25 border border-amber-300/30 text-amber-200 font-bold">
+              <span className="w-2 h-2 rounded-full bg-amber-400" />
+              Club Event (2)
+            </span>
+          </div>
         </div>
       </section>
 
-      {/* Metrics + governance tools (kept from the working module) */}
+      {/* Metrics Bar */}
       {(metrics || userRole === "admin") && (
         <div className="flex flex-wrap items-center gap-2 text-[11.5px]">
           {metrics && (
@@ -490,12 +495,12 @@ export default function SpectraEventsModule({
                 ⊘ Cancelled: {metrics.cancelled_count}
               </span>
               <span className="px-2.5 py-1 rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-950/50 dark:text-yellow-300 font-extrabold">
-                Score: {metrics.booking_score.toFixed(1)} / 100
+                Score: {metrics.booking_score.toFixed(1)} / 70.0
               </span>
             </>
           )}
           <span className="ml-auto text-[11px] text-[var(--muted)] font-semibold">
-            Active user: <span className="text-[var(--ink)] font-bold">{currentUserName}</span> ({userRole})
+            Active session: <span className="text-[var(--ink)] font-bold">{currentUserName}</span> ({userRole})
             {userRole === "admin" && (
               <button
                 onClick={toggleSimulateIdentity}
@@ -509,134 +514,167 @@ export default function SpectraEventsModule({
         </div>
       )}
 
-      {/* 2. TABS, SORT, STATUS + SEARCH */}
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 overflow-x-auto max-w-full pb-1" role="tablist" aria-label="Event categories">
-            {[
-              { id: "all", label: "All Events", count: events.length },
-              { id: "institute_event", label: "Institute Events", count: events.filter((e) => e.category === "institute_event").length },
-              { id: "guest_lecture", label: "Guest Lectures", count: events.filter((e) => e.category === "guest_lecture").length },
-              { id: "department_event", label: "Dept. Events", count: events.filter((e) => e.category === "department_event").length },
-              { id: "club_event", label: "Club Events", count: events.filter((e) => e.category === "club_event").length },
-            ].map((tab) => {
-              const isActive = activeCategory === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  role="tab"
-                  aria-selected={isActive}
-                  onClick={() => setActiveCategory(tab.id)}
-                  className={`shrink-0 inline-flex items-center gap-2 h-9 px-4 rounded-full border text-[12.5px] font-bold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 ${
-                    isActive ? "text-white border-transparent" : "hover:bg-[var(--row-hover)]"
-                  }`}
-                  style={
-                    isActive
-                      ? { background: "linear-gradient(110deg,#155BFF,#2F7BF5)", boxShadow: "0 8px 18px rgba(21,91,255,.38)" }
-                      : { background: "var(--surface)", borderColor: "var(--border)" }
-                  }
-                >
-                  {tab.label}
-                  <span className={`text-[11px] px-1.5 rounded-full ${isActive ? "bg-white/25" : "bg-[var(--search-bg)] text-[var(--muted)]"}`}>
-                    {tab.count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <select
-                value={sortBy}
-                onChange={(e: any) => setSortBy(e.target.value)}
-                aria-label="Sort events"
-                className="appearance-none h-9 pl-4 pr-9 rounded-full border bg-[var(--surface)] text-[12.5px] font-bold focus:outline-none cursor-pointer"
-                style={{ borderColor: "var(--border)" }}
-              >
-                <option value="priority">Sort by: Priority</option>
-                <option value="id">Sort by: Request Ref</option>
-                <option value="attendance">Sort by: Attendance</option>
-                <option value="day">Sort by: Day of Week</option>
-              </select>
-              <ChevronDown className="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            </div>
-            <button
-              onClick={() => setShowHistoryModal(true)}
-              className="h-9 px-3.5 inline-flex items-center gap-1.5 rounded-full border bg-[var(--surface)] text-[12.5px] font-bold hover:bg-[var(--row-hover)] transition"
-              style={{ borderColor: "var(--border)" }}
-              title="View Governance Decisions & Audit Log (Task 113)"
-            >
-              <History className="w-3.5 h-3.5 text-blue-600 dark:text-sky-400" />
-              <span className="hidden sm:inline">Decision History</span> ({history.length})
-            </button>
-            <button
-              onClick={fetchSpectraEvents}
-              disabled={loading}
-              aria-label="Refresh events list"
-              className="w-9 h-9 rounded-full border bg-[var(--surface)] flex items-center justify-center text-[var(--muted)] hover:text-[var(--ink)] transition"
-              style={{ borderColor: "var(--border)" }}
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-            </button>
-          </div>
+      {/* 2. CONTROLS, VIEW TOGGLE & TIMELINE VENUE SWITCH */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-[var(--surface)] p-3.5 rounded-2xl border border-[var(--border)] shadow-xs">
+        {/* View Mode Switcher */}
+        <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--search-bg)] border border-[var(--border)]">
+          <button
+            onClick={() => setViewMode("timeline")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+              viewMode === "timeline" ? "bg-[var(--surface)] text-blue-600 shadow-sm" : "text-[var(--muted)] hover:text-[var(--ink)]"
+            }`}
+          >
+            <Columns className="w-3.5 h-3.5" /> Venue Timeline (P1–P13)
+          </button>
+          <button
+            onClick={() => setViewMode("cards")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+              viewMode === "cards" ? "bg-[var(--surface)] text-blue-600 shadow-sm" : "text-[var(--muted)] hover:text-[var(--ink)]"
+            }`}
+          >
+            <Grid className="w-3.5 h-3.5" /> Event Cards
+          </button>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] font-bold text-[var(--muted)] uppercase tracking-wider mr-1">Status</span>
-            {[
-              { id: "all", label: "All" },
-              { id: "approved", label: "Approved" },
-              { id: "alternative_offered", label: "Alternative" },
-              { id: "pending", label: "Pending" },
-              { id: "rejected", label: "Rejected" },
-              { id: "cancelled", label: "Cancelled" },
-            ].map((st) => (
+        {/* Venue Selector for Timeline */}
+        {viewMode === "timeline" && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-bold text-[var(--muted)]">Venue:</span>
+            {["AUD", "OAT", "SH-1", "SH-2", "CS-LAB-1"].map((v) => (
               <button
-                key={st.id}
-                onClick={() => setActiveStatus(st.id)}
-                aria-pressed={activeStatus === st.id}
-                className={`px-2.5 py-1 rounded-full text-[11.5px] font-bold transition ${
-                  activeStatus === st.id
-                    ? "bg-blue-100 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-300 dark:border-blue-800"
-                    : "text-[var(--muted)] hover:bg-[var(--row-hover)] border border-transparent"
+                key={v}
+                onClick={() => setSelectedVenue(v)}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                  selectedVenue === v
+                    ? "bg-blue-600 text-white shadow-xs"
+                    : "text-[var(--muted)] hover:bg-[var(--search-bg)]"
                 }`}
               >
-                {st.label}
+                {v}
               </button>
             ))}
           </div>
-          <div className="relative w-full sm:w-64">
-            <Search className="w-3.5 h-3.5 text-[var(--muted)] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Search events, clubs, or organizers..."
-              aria-label="Search events"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full h-9 pl-9 pr-8 rounded-full border text-[12.5px] font-medium placeholder:text-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-              style={{ background: "var(--search-bg)", borderColor: "var(--search-border)" }}
-            />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery("")} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--muted)] hover:text-[var(--ink)]">
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
+        )}
+
+        {/* Search */}
+        <div className="relative">
+          <Search className="w-3.5 h-3.5 text-[var(--muted)] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Search events, clubs, or organizers..."
+            aria-label="Search events"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-48 sm:w-60 h-8 pl-8 pr-7 rounded-full border text-[12px] font-medium placeholder:text-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+            style={{ background: "var(--search-bg)", borderColor: "var(--search-border)" }}
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery("")} aria-label="Clear search" className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--muted)] hover:text-[var(--ink)]">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Error Banner */}
-      {error && (
-        <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 text-xs flex items-center justify-between">
-          <span>{error}</span>
-          <button onClick={fetchSpectraEvents} className="underline font-bold ml-3">Retry</button>
-        </div>
+      {/* 3. DAY-WISE VENUE TIMELINE (P1–P13) */}
+      {viewMode === "timeline" && (
+        <section
+          className="rounded-[22px] border bg-[var(--surface)] p-4 sm:p-5 space-y-4 shadow-xs"
+          style={{ borderColor: "var(--border)" }}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-3" style={{ borderColor: "var(--border)" }}>
+            <div>
+              <h2 className="font-heading font-extrabold text-base flex items-center gap-2">
+                <Building className="w-4 h-4 text-blue-600" />
+                <span>{selectedVenue} Day-Wise Festival Timeline</span>
+              </h2>
+              <p className="text-xs text-[var(--muted)]">
+                P1–P9 (08:00–18:00 Teaching Hours) • P10–P13 (18:00–22:00 Evening Event Window &amp; Curfew Cutoff)
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowHistoryModal(true)}
+                className="h-8 px-3 rounded-lg border text-xs font-bold text-blue-600 dark:text-sky-400 hover:bg-[var(--row-hover)] flex items-center gap-1.5"
+                style={{ borderColor: "var(--border)" }}
+              >
+                <History className="w-3.5 h-3.5" /> Decision History ({history.length})
+              </button>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <div className="min-w-[900px] space-y-3">
+              {/* Period Header */}
+              <div className="flex items-center gap-3">
+                <div className="w-14 text-center font-bold text-xs text-[var(--muted)] shrink-0">DAY</div>
+                <div className="flex-1 grid grid-cols-13 gap-1 px-1.5 text-[10px] font-bold text-[var(--muted)] font-mono text-center">
+                  {PERIODS.map((p) => (
+                    <div key={p} className={`${p >= 10 ? "text-amber-600 dark:text-amber-400 font-extrabold" : ""}`}>
+                      P{p}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Day Rows */}
+              {DAYS.map((d) => {
+                const dayEvents = events.filter(
+                  (e) =>
+                    e.day === d &&
+                    (e.room_id === selectedVenue || e.venue.includes(selectedVenue)) &&
+                    e.status === "approved"
+                );
+
+                return (
+                  <div key={d} className="flex items-center gap-3">
+                    <div className="w-14 font-heading font-extrabold text-xs text-[var(--muted)] shrink-0">{d}</div>
+                    <div className="flex-1 grid grid-cols-13 gap-1 bg-[var(--search-bg)] p-1.5 rounded-xl border border-[var(--border)] relative h-16">
+                      {PERIODS.map((p) => {
+                        const occupying = dayEvents.find((e) => p >= e.start_period && p <= e.end_period);
+                        const isStart = occupying && occupying.start_period === p;
+                        const colSpan = occupying ? occupying.end_period - occupying.start_period + 1 : 1;
+                        const catStyle = occupying ? CATEGORY_STYLES[occupying.category] : null;
+
+                        if (occupying && !isStart) return null;
+
+                        return occupying && catStyle ? (
+                          <div
+                            key={p}
+                            style={{ gridColumn: `span ${colSpan}` }}
+                            onClick={() => setSelectedEvent(occupying)}
+                            className={`p-1.5 rounded-lg border ${catStyle.border} ${catStyle.bg} ${catStyle.text} flex flex-col justify-center cursor-pointer hover:brightness-95 transition shadow-xs overflow-hidden`}
+                          >
+                            <div className="font-extrabold text-[11px] truncate flex items-center gap-1">
+                              <span className={`w-1.5 h-1.5 rounded-full ${catStyle.dot}`} />
+                              <span>{occupying.title}</span>
+                            </div>
+                            <div className="text-[9.5px] opacity-85 truncate">
+                              P{occupying.start_period}–P{occupying.end_period} &bull; {occupying.requester}
+                            </div>
+                          </div>
+                        ) : (
+                          <div
+                            key={p}
+                            className={`rounded border border-dashed flex items-center justify-center text-[9px] font-mono opacity-40 ${
+                              p >= 10 ? "border-amber-300 text-amber-700" : "border-[var(--border)] text-[var(--muted)]"
+                            }`}
+                          >
+                            P{p}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
       )}
 
-      {/* 3. EVENT CARDS + RIGHT RAIL */}
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_272px] gap-5 sm:gap-6 items-start">
+      {/* 4. EVENT CARDS GRID WITH EXPLICIT REASON CHIPS */}
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_280px] gap-5 items-start">
         <div id="spectra-events-grid" className="scroll-mt-4 min-w-0">
           {loading && events.length === 0 ? (
             <div className="py-20 text-center text-xs text-[var(--muted)] flex flex-col items-center justify-center gap-3">
@@ -648,17 +686,22 @@ export default function SpectraEventsModule({
               <p className="font-bold text-sm">No events found</p>
               <p>Try changing your filters or search terms.</p>
               <button
-                onClick={() => { setActiveCategory("all"); setActiveStatus("all"); setSearchQuery(""); }}
+                onClick={() => {
+                  setActiveCategory("all");
+                  setActiveStatus("all");
+                  setSearchQuery("");
+                }}
                 className="px-4 py-2 mt-2 rounded-xl bg-blue-600 text-white font-bold text-xs"
               >
                 Reset Filters
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-2 min-[1420px]:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 min-[1440px]:grid-cols-3 gap-4">
               {filteredEvents.map((ev) => {
                 const isBookmarked = bookmarked[ev.requestId];
                 const pr = priorityInfo(ev.priorityWeight);
+                const catStyle = CATEGORY_STYLES[ev.category] || CATEGORY_STYLES.club_event;
                 const open = () => {
                   setSelectedEvent(ev);
                   setActionNotice(null);
@@ -669,6 +712,7 @@ export default function SpectraEventsModule({
                   .filter(Boolean)
                   .slice(0, 3)
                   .map((w) => w[0]?.toUpperCase());
+
                 return (
                   <article
                     key={ev.requestId}
@@ -676,90 +720,119 @@ export default function SpectraEventsModule({
                     className="group rounded-[18px] bg-[var(--surface)] border overflow-hidden flex flex-col cursor-pointer transition hover:-translate-y-0.5"
                     style={{
                       borderColor: isDark ? "#1B4F9C" : "var(--border)",
-                      boxShadow: isDark ? "0 0 0 1px rgba(30,100,220,.15), 0 10px 26px rgba(0,60,200,.14)" : "var(--shadow-card)",
+                      boxShadow: isDark
+                        ? "0 0 0 1px rgba(30,100,220,.15), 0 10px 26px rgba(0,60,200,.14)"
+                        : "var(--shadow-card)",
                     }}
                   >
                     <div
-                      className="relative h-[112px] bg-cover bg-center"
+                      className="relative h-[110px] bg-cover bg-center"
                       style={{ backgroundImage: `url(${eventImage(ev)})` }}
                       role="img"
                       aria-label={`${ev.title} artwork`}
                     >
-                      <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/25" />
+                      <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/30" />
                       <button
                         onClick={(e) => toggleBookmark(ev.requestId, e)}
                         aria-label={isBookmarked ? "Remove bookmark" : "Bookmark event"}
                         aria-pressed={!!isBookmarked}
-                        className={`absolute left-3 top-3 w-9 h-9 rounded-xl flex items-center justify-center backdrop-blur-md border border-white/40 transition ${
+                        className={`absolute left-3 top-3 w-8 h-8 rounded-xl flex items-center justify-center backdrop-blur-md border border-white/40 transition ${
                           isBookmarked ? "bg-white text-blue-600" : "bg-black/30 text-white hover:bg-white/25"
                         }`}
                       >
-                        <Bookmark className="w-4 h-4 fill-current" />
+                        <Bookmark className="w-3.5 h-3.5 fill-current" />
                       </button>
-                      <span className={`absolute right-3 top-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border shadow-md ${getStatusBadgeStyle(ev.status)}`}>
+                      <span
+                        className={`absolute right-3 top-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-bold border shadow-md ${getStatusBadgeStyle(
+                          ev.status
+                        )}`}
+                      >
                         <Calendar className="w-3 h-3" />
                         {STATUS_LABEL[ev.status] ?? ev.status}
                       </span>
                     </div>
 
-                    <div className="p-3.5 flex flex-col gap-2.5 flex-1">
-                      <div className="flex items-start gap-3">
-                        <div className="w-11 shrink-0 text-center leading-none pt-0.5">
-                          <div className="text-[10px] font-bold text-[var(--muted)] tracking-wider">DAY</div>
-                          <div className="mt-1 font-heading font-extrabold text-[19px]">{ev.day}</div>
+                    <div className="p-3.5 flex flex-col gap-2.5 flex-1 justify-between">
+                      <div className="space-y-2">
+                        <div className="flex items-start gap-2.5">
+                          <div className="w-10 shrink-0 text-center leading-none pt-0.5">
+                            <div className="text-[9.5px] font-bold text-[var(--muted)]">DAY</div>
+                            <div className="mt-1 font-heading font-extrabold text-[17px]">{ev.day}</div>
+                          </div>
+                          <div className="min-w-0">
+                            <h3 className="font-heading font-extrabold text-[14px] leading-tight line-clamp-1 group-hover:text-blue-600 dark:group-hover:text-sky-400 transition">
+                              {ev.title}
+                            </h3>
+                            <p className="mt-0.5 text-[11px] text-[var(--muted)] font-medium truncate">
+                              {ev.requestId} &bull; {ev.requester}
+                            </p>
+                          </div>
                         </div>
-                        <div className="min-w-0">
-                          <h3 className="font-heading font-extrabold text-[15px] leading-tight line-clamp-2 group-hover:text-blue-600 dark:group-hover:text-sky-400 transition">
-                            {ev.title}
-                          </h3>
-                          <p className="mt-0.5 text-[11.5px] text-[var(--muted)] font-medium truncate">
-                            {ev.requestId} • {ev.requester}
-                            {ev.department ? ` • ${ev.department}` : ""}
-                          </p>
-                        </div>
-                      </div>
 
-                      <div className="space-y-1.5 text-[12px] font-semibold">
-                        <div className="flex items-center gap-2">
-                          <Clock className="w-3.5 h-3.5 shrink-0" />
-                          <span>{ev.time}</span>
+                        <div className="space-y-1 text-[11.5px] font-semibold text-[var(--ink)]">
+                          <div className="flex items-center gap-2">
+                            <Clock className="w-3.5 h-3.5 text-[var(--muted)] shrink-0" />
+                            <span>{ev.time}</span>
+                          </div>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <MapPin className="w-3.5 h-3.5 text-[var(--muted)] shrink-0" />
+                            <span className="truncate">{ev.venue}</span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 min-w-0">
-                          <MapPin className="w-3.5 h-3.5 shrink-0" />
-                          <span className="truncate">{ev.venue}</span>
-                        </div>
-                      </div>
 
-                      <div className="flex items-center justify-between gap-2 mt-auto pt-0.5">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11.5px] font-bold ${pr.cls}`}>
-                          <pr.Icon className="w-3.5 h-3.5 fill-current" />
-                          {pr.label}
-                        </span>
-                        <span className="flex items-center gap-1.5" aria-label={`${ev.attendance} expected attendees`}>
-                          <span className="flex -space-x-2">
-                            {AVATAR_TONES.map((tone, i) => (
-                              <span
-                                key={i}
-                                className={`w-6 h-6 rounded-full ring-2 ring-[var(--surface)] bg-gradient-to-br ${tone} text-white text-[10px] font-extrabold flex items-center justify-center`}
-                              >
-                                {initials[i] ?? "•"}
-                              </span>
-                            ))}
+                        {/* Priority Hierarchy Tag */}
+                        <div>
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10.5px] font-bold border ${catStyle.border} ${catStyle.bg} ${catStyle.text}`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${catStyle.dot}`} />
+                            <span>{catStyle.label}</span>
                           </span>
-                          <span className="text-[12px] font-extrabold text-blue-600 dark:text-sky-400">+{ev.attendance}</span>
-                        </span>
+                        </div>
+
+                        {/* Explicit Reason Chip (Mandatory Requirement) */}
+                        <div
+                          className={`p-2.5 rounded-xl border text-[11px] space-y-0.5 ${
+                            ev.status === "approved"
+                              ? "bg-emerald-50 text-emerald-900 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                              : ev.status === "rejected"
+                              ? "bg-rose-50 text-rose-900 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800"
+                              : ev.status === "alternative_offered"
+                              ? "bg-amber-50 text-amber-900 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                              : "bg-[var(--search-bg)] border-[var(--border)] text-[var(--ink)]"
+                          }`}
+                        >
+                          <div className="font-extrabold text-[10.5px] flex items-center gap-1">
+                            {ev.status === "approved" ? (
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                            ) : ev.status === "rejected" ? (
+                              <Ban className="w-3 h-3 text-rose-600" />
+                            ) : (
+                              <Info className="w-3 h-3 text-amber-600" />
+                            )}
+                            <span>Decision Reason:</span>
+                          </div>
+                          <p className="italic text-[10px] line-clamp-2">&quot;{ev.reason}&quot;</p>
+                        </div>
                       </div>
 
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          open();
-                        }}
-                        className="w-full h-10 rounded-xl text-white text-[13px] font-bold flex items-center justify-center gap-1.5 transition hover:brightness-110"
-                        style={{ background: "linear-gradient(110deg,#155BFF,#2F7BF5)", boxShadow: "0 8px 18px rgba(21,91,255,.3)" }}
-                      >
-                        {ctaLabel(ev.status)} <ArrowRight className="w-4 h-4" strokeWidth={2.5} />
-                      </button>
+                      <div className="pt-2 border-t flex items-center justify-between gap-2" style={{ borderColor: "var(--border)" }}>
+                        <span className="flex items-center gap-1 text-[11px] text-[var(--muted)]">
+                          <Users className="w-3 h-3" />
+                          <span>{ev.attendance} attendees</span>
+                        </span>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            open();
+                          }}
+                          className="h-8 px-3 rounded-lg text-white text-[11.5px] font-bold flex items-center gap-1 transition hover:brightness-110"
+                          style={{ background: "linear-gradient(110deg,#155BFF,#2F7BF5)" }}
+                        >
+                          {ctaLabel(ev.status)} <ArrowRight className="w-3 h-3" strokeWidth={2.5} />
+                        </button>
+                      </div>
                     </div>
                   </article>
                 );
@@ -768,31 +841,30 @@ export default function SpectraEventsModule({
           )}
         </div>
 
-        {/* Right rail */}
-        <aside className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-1 gap-4 sm:gap-5 min-w-0">
+        {/* Right Rail */}
+        <aside className="space-y-4 min-w-0">
           {/* My Bookings */}
           <section
             className="rounded-[18px] border bg-[var(--surface)] p-4"
             style={{
               borderColor: isDark ? "#1B4F9C" : "var(--border)",
-              boxShadow: isDark ? "0 0 0 1px rgba(30,100,220,.15)" : "var(--shadow-card)",
+              boxShadow: "var(--shadow-card)",
             }}
-            aria-labelledby="mb-h"
           >
             <div className="flex items-center justify-between mb-2.5">
-              <h2 id="mb-h" className="font-heading font-extrabold text-[15px]">My Bookings</h2>
+              <h2 className="font-heading font-extrabold text-[14px]">My Bookings</h2>
               <button
                 onClick={() => {
                   setActiveCategory("all");
                   setActiveStatus("all");
                   setSearchQuery(currentUserName);
                 }}
-                className="text-[12px] font-bold text-blue-600 dark:text-sky-400 hover:underline flex items-center gap-1"
+                className="text-[11.5px] font-bold text-blue-600 dark:text-sky-400 hover:underline flex items-center gap-1"
               >
-                View All <ArrowRight className="w-3.5 h-3.5" strokeWidth={2.6} />
+                View All <ArrowRight className="w-3 h-3" strokeWidth={2.6} />
               </button>
             </div>
-            <ul>
+            <ul className="space-y-1">
               {myBookings.map((ev) => (
                 <li key={ev.requestId} className="border-t first:border-t-0" style={{ borderColor: "var(--border)" }}>
                   <button
@@ -801,190 +873,123 @@ export default function SpectraEventsModule({
                       setActionNotice(null);
                       setShowRejectForm(false);
                     }}
-                    className="w-full flex items-center gap-3 py-2.5 text-left hover:bg-[var(--row-hover)] rounded-lg transition"
+                    className="w-full flex items-center gap-2.5 py-2 text-left hover:bg-[var(--row-hover)] rounded-lg transition"
                   >
                     <span
-                      className="w-11 h-11 rounded-lg bg-cover bg-center shrink-0 border"
+                      className="w-9 h-9 rounded-lg bg-cover bg-center shrink-0 border"
                       style={{ backgroundImage: `url(${eventImage(ev)})`, borderColor: "var(--border)" }}
-                      aria-hidden="true"
                     />
                     <span className="min-w-0 flex-1 leading-tight">
-                      <span className="block font-bold text-[12.5px] truncate">{ev.title}</span>
-                      <span className="block text-[11px] text-[var(--muted)] font-medium">
-                        {ev.day} • {ev.time}
+                      <span className="block font-bold text-[12px] truncate">{ev.title}</span>
+                      <span className="block text-[10.5px] text-[var(--muted)]">
+                        {ev.day} &bull; {ev.time}
                       </span>
                     </span>
-                    <span className={`shrink-0 px-2 py-0.5 rounded-md text-[10.5px] font-bold border ${getStatusBadgeStyle(ev.status)}`}>
+                    <span
+                      className={`shrink-0 px-2 py-0.5 rounded text-[10px] font-bold border ${getStatusBadgeStyle(
+                        ev.status
+                      )}`}
+                    >
                       {STATUS_LABEL[ev.status] ?? ev.status}
                     </span>
                   </button>
                 </li>
               ))}
-              {myBookings.length === 0 && (
-                <li className="py-4 text-center text-[12px] text-[var(--muted)] font-medium">
-                  No bookings yet. Your event requests will appear here.
-                </li>
-              )}
             </ul>
           </section>
 
-          {/* Quick Actions */}
+          {/* Guidelines */}
           <section
-            className="rounded-[18px] border bg-[var(--surface)] p-4"
-            style={{
-              borderColor: isDark ? "#1B4F9C" : "var(--border)",
-              boxShadow: isDark ? "0 0 0 1px rgba(30,100,220,.15)" : "var(--shadow-card)",
-            }}
-            aria-labelledby="qa-sp-h"
+            className="rounded-[18px] border bg-[var(--surface)] p-4 space-y-2.5 text-xs"
+            style={{ borderColor: "var(--border)" }}
           >
-            <h2 id="qa-sp-h" className="font-heading font-extrabold text-[15px] mb-2.5">Quick Actions</h2>
-            <div className="grid grid-cols-3 gap-2.5">
-              {[
-                { label: "View Timetable", Icon: Calendar, run: () => onNavigateTab && onNavigateTab("timetable") },
-                { label: "My Requests", Icon: CheckCircle2, run: () => setSearchQuery(currentUserName) },
-                { label: "Event Guidelines", Icon: FileText, run: () => setShowGuidelines((p) => !p) },
-              ].map((a) => (
-                <button
-                  key={a.label}
-                  onClick={a.run}
-                  className="qa-tile qa-blue min-h-[84px] px-1.5 py-2.5 flex flex-col items-center justify-center gap-1.5 text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
-                >
-                  <a.Icon className="w-5 h-5 text-blue-600 dark:text-sky-300" strokeWidth={2.1} />
-                  <span className="text-[11px] font-bold leading-tight">{a.label}</span>
-                </button>
-              ))}
+            <div className="flex items-center gap-1.5 font-bold font-heading text-sm">
+              <Award className="w-4 h-4 text-amber-500" />
+              <span>Priority Guidelines</span>
+            </div>
+            <p className="text-[11px] text-[var(--muted)] leading-relaxed">
+              Academic classes &amp; exams are strictly immune to displacement. Institute &amp; distinguished lectures outrank club activities.
+            </p>
+            <div className="p-2.5 rounded-xl bg-[var(--search-bg)] border border-[var(--border)] text-[10.5px] space-y-1">
+              <div>&bull; <strong>Curfew Limit:</strong> All events terminate before P13 (22:00).</div>
+              <div>&bull; <strong>Self-Approval:</strong> Requesters cannot approve their own events.</div>
+              <div>&bull; <strong>Validation Gate:</strong> Approvals verified against full class schedule.</div>
             </div>
           </section>
-
-          {/* Event Guidelines (Section 4 priority hierarchy) */}
-          {showGuidelines && (
-            <section className="rounded-[18px] border bg-[var(--surface)] p-4 space-y-3 md:col-span-2 xl:col-span-1" style={{ borderColor: "var(--border)", boxShadow: "var(--shadow-card)" }}>
-              <div className="flex items-center justify-between">
-                <h2 className="font-heading font-extrabold text-[15px] flex items-center gap-1.5">
-                  <Award className="w-4 h-4 text-amber-500" /> Event Guidelines
-                </h2>
-                <button type="button" onClick={() => setShowGuidelines(false)} className="text-[11px] font-bold text-blue-600 dark:text-sky-400 hover:underline">
-                  Hide
-                </button>
-              </div>
-              <p className="text-[11px] text-[var(--muted)] leading-relaxed">
-                CIT Section 4 dictates strict allocation hierarchy during Crunch Week:
-              </p>
-              <div className="space-y-2 text-xs">
-                <div className="p-2 rounded-xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 flex items-center justify-between gap-2">
-                  <div>
-                    <div className="font-bold text-purple-900 dark:text-purple-300">1. Exams &amp; Regular Sessions</div>
-                    <div className="text-[10px] text-purple-700 dark:text-purple-400">Strictly immune to preemption</div>
-                  </div>
-                  <span className="text-[10px] font-mono font-bold bg-purple-200 dark:bg-purple-900 px-1.5 py-0.5 rounded">P1–P9</span>
-                </div>
-                <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 flex items-center justify-between gap-2">
-                  <div>
-                    <div className="font-bold text-blue-900 dark:text-blue-300">2. Institute Events</div>
-                    <div className="text-[10px] text-blue-700 dark:text-blue-400">Tech Fest Inauguration, Convocation</div>
-                  </div>
-                  <span className="text-[10px] font-mono font-bold bg-blue-200 dark:bg-blue-900 px-1.5 py-0.5 rounded">Weight: 10</span>
-                </div>
-                <div className="p-2 rounded-xl bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 flex items-center justify-between gap-2">
-                  <div>
-                    <div className="font-bold text-teal-900 dark:text-teal-300">3. Distinguished Lectures</div>
-                    <div className="text-[10px] text-teal-700 dark:text-teal-400">ISRO, Industry Leaders</div>
-                  </div>
-                  <span className="text-[10px] font-mono font-bold bg-teal-200 dark:bg-teal-900 px-1.5 py-0.5 rounded">Weight: 8</span>
-                </div>
-                <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 flex items-center justify-between gap-2">
-                  <div>
-                    <div className="font-bold text-amber-900 dark:text-amber-300">4. Dept &amp; Club Events</div>
-                    <div className="text-[10px] text-amber-700 dark:text-amber-400">Competitions, Hackathons, Cultural</div>
-                  </div>
-                  <span className="text-[10px] font-mono font-bold bg-amber-200 dark:bg-amber-900 px-1.5 py-0.5 rounded">Weight: 2–5</span>
-                </div>
-              </div>
-              <div className="p-3 rounded-xl bg-[var(--bg)] border border-[var(--border)] text-[11px] text-[var(--muted)] space-y-1.5">
-                <div className="font-bold text-[var(--ink)]">CIT Governance Mandates:</div>
-                <p>• <strong>Curfew Limit:</strong> All student activities must terminate before Period 13 (22:00).</p>
-                <p>• <strong>Self-Approval Rule:</strong> Section 4 strictly prohibits any requester from approving their own event.</p>
-                <p>• <strong>Authority:</strong> Only Dean&apos;s Office or Department Coordinators hold approval authorization.</p>
-              </div>
-            </section>
-          )}
         </aside>
       </div>
 
-      {/* 4. EVENT DETAILS & GOVERNANCE MODAL */}
+      {/* 5. EVENT DETAILS & GOVERNANCE MODAL */}
       {selectedEvent && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto animate-in fade-in">
             {/* Header */}
-            <div className="flex justify-between items-start">
+            <div className="flex justify-between items-start border-b pb-3" style={{ borderColor: "var(--border)" }}>
               <div>
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="font-mono text-xs font-bold bg-blue-100 text-blue-800 dark:bg-blue-950/70 dark:text-blue-300 px-2 py-0.5 rounded-md border border-blue-200">
+                  <span className="font-mono text-xs font-bold bg-blue-100 text-blue-800 dark:bg-blue-950/70 dark:text-blue-300 px-2 py-0.5 rounded border border-blue-200">
                     {selectedEvent.requestId}
                   </span>
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${getStatusBadgeStyle(selectedEvent.status)}`}>
-                    {selectedEvent.status === "alternative_offered" ? "ALTERNATIVE OFFERED" : selectedEvent.status.toUpperCase()}
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${getStatusBadgeStyle(
+                      selectedEvent.status
+                    )}`}
+                  >
+                    {selectedEvent.status === "alternative_offered"
+                      ? "ALTERNATIVE OFFERED"
+                      : selectedEvent.status.toUpperCase()}
                   </span>
                 </div>
-                <h3 className="text-xl font-extrabold font-heading text-[var(--ink)]">
-                  {selectedEvent.title}
-                </h3>
+                <h3 className="text-lg font-extrabold font-heading text-[var(--ink)]">{selectedEvent.title}</h3>
                 <p className="text-xs text-[var(--muted)]">
                   Requested by: <strong>{selectedEvent.requester}</strong> ({selectedEvent.role})
-                  {selectedEvent.department && ` · Dept of ${selectedEvent.department}`}
                 </p>
               </div>
               <button
-                onClick={() => { setSelectedEvent(null); setActionNotice(null); setShowRejectForm(false); }}
-                className="p-1.5 rounded-lg border border-[var(--border)] hover:bg-[var(--bg)]"
+                onClick={() => {
+                  setSelectedEvent(null);
+                  setActionNotice(null);
+                  setShowRejectForm(false);
+                }}
+                className="p-1.5 rounded-lg border border-[var(--border)] hover:bg-[var(--search-bg)]"
               >
                 <X className="w-4 h-4 text-[var(--muted)]" />
               </button>
             </div>
 
-            {/* Task 96: Original Raw Natural Language Text */}
-            <div className="p-3.5 rounded-xl bg-[var(--bg)] border border-[var(--border)] space-y-1">
+            {/* Original Raw Text */}
+            <div className="p-3 rounded-xl bg-[var(--search-bg)] border border-[var(--border)] space-y-1">
               <span className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-wider block">
-                Original Request Text (Natural Language Submission)
+                Original Natural Language Prompt (NLP Submission)
               </span>
-              <p className="text-xs italic text-[var(--ink)] font-serif leading-relaxed">
-                "{selectedEvent.raw_text}"
-              </p>
+              <p className="text-xs italic font-serif leading-relaxed text-[var(--ink)]">&quot;{selectedEvent.raw_text}&quot;</p>
             </div>
 
-            {/* Key Event Metadata Grid */}
-            <div className="p-3 rounded-xl bg-[var(--bg)] border border-[var(--border)] grid grid-cols-2 gap-3 text-xs">
+            {/* Metadata Grid */}
+            <div className="p-3 rounded-xl bg-[var(--search-bg)] border border-[var(--border)] grid grid-cols-2 gap-3 text-xs">
               <div>
-                <span className="text-[10px] text-[var(--muted)] font-bold block uppercase">
-                  Allocated Venue
-                </span>
+                <span className="text-[10px] text-[var(--muted)] font-bold block uppercase">Allocated Venue</span>
                 <span className="font-extrabold flex items-center gap-1">
                   <Building className="w-3.5 h-3.5 text-blue-500" />
                   {selectedEvent.venue}
                 </span>
               </div>
               <div>
-                <span className="text-[10px] text-[var(--muted)] font-bold block uppercase">
-                  Day & Period Window
-                </span>
+                <span className="text-[10px] text-[var(--muted)] font-bold block uppercase">Day &amp; Period Window</span>
                 <span className="font-extrabold flex items-center gap-1">
                   <Clock className="w-3.5 h-3.5 text-indigo-500" />
-                  {selectedEvent.day} · {selectedEvent.time}
+                  {selectedEvent.day} &bull; {selectedEvent.time}
                 </span>
               </div>
               <div>
-                <span className="text-[10px] text-[var(--muted)] font-bold block uppercase">
-                  Expected Attendance
-                </span>
+                <span className="text-[10px] text-[var(--muted)] font-bold block uppercase">Expected Attendance</span>
                 <span className="font-extrabold flex items-center gap-1">
                   <Users className="w-3.5 h-3.5 text-emerald-500" />
                   {selectedEvent.attendance} Participants
                 </span>
               </div>
               <div>
-                <span className="text-[10px] text-[var(--muted)] font-bold block uppercase">
-                  Category & Weight
-                </span>
+                <span className="text-[10px] text-[var(--muted)] font-bold block uppercase">Category &amp; Priority</span>
                 <span className="font-extrabold capitalize flex items-center gap-1">
                   <Award className="w-3.5 h-3.5 text-amber-500" />
                   {selectedEvent.category.replace("_", " ")} (Weight: {selectedEvent.priorityWeight})
@@ -992,48 +997,31 @@ export default function SpectraEventsModule({
               </div>
             </div>
 
-            {/* Needs & Equipment */}
-            {selectedEvent.needs && selectedEvent.needs.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                <span className="text-[10px] font-bold text-[var(--muted)] uppercase mr-1">
-                  Required Facilities:
-                </span>
-                {selectedEvent.needs.map((nd, i) => (
-                  <span
-                    key={i}
-                    className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 text-[10px] font-semibold"
-                  >
-                    {nd}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {/* Task 112: Decision Explanation / Reason */}
-            <div className={`p-3 rounded-xl border text-xs space-y-1 ${
-              selectedEvent.status === "approved"
-                ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200"
-                : selectedEvent.status === "alternative_offered"
-                ? "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200"
-                : selectedEvent.status === "cancelled"
-                ? "bg-slate-100 dark:bg-slate-800/50 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-300"
-                : "bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800 text-rose-900 dark:text-rose-200"
-            }`}>
+            {/* Explicit Reason & Justification */}
+            <div
+              className={`p-3.5 rounded-xl border text-xs space-y-1 ${
+                selectedEvent.status === "approved"
+                  ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 text-emerald-900 dark:text-emerald-200"
+                  : selectedEvent.status === "alternative_offered"
+                  ? "bg-amber-50 dark:bg-amber-950/40 border-amber-300 text-amber-900 dark:text-amber-200"
+                  : selectedEvent.status === "cancelled"
+                  ? "bg-slate-100 dark:bg-slate-800/50 border-slate-300 text-slate-800 dark:text-slate-300"
+                  : "bg-rose-50 dark:bg-rose-950/40 border-rose-300 text-rose-900 dark:text-rose-200"
+              }`}
+            >
               <div className="font-bold flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>Official Decision & Reason:</span>
+                <span>Official Decision Justification:</span>
               </div>
-              <p className="text-[11px] leading-relaxed">
-                {selectedEvent.reason}
-              </p>
+              <p className="text-[11.5px] leading-relaxed">{selectedEvent.reason}</p>
             </div>
 
-            {/* Tasks 107 & 108: Alternative Venue / Time Suggestions */}
+            {/* Alternative Suggestions */}
             <div className="p-3.5 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/60 space-y-2">
               <div className="flex items-center justify-between">
                 <div className="text-xs font-bold text-blue-900 dark:text-blue-300 flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Alternative Venue & Time Suggestions (Tasks 107 & 108)</span>
+                  <span>Alternative Venue &amp; Time Suggestions</span>
                 </div>
                 <button
                   type="button"
@@ -1053,10 +1041,10 @@ export default function SpectraEventsModule({
                   {loadingAlts ? (
                     <div className="text-xs text-[var(--muted)] flex items-center gap-2 py-2">
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      <span>Analyzing qualified rooms and zero-clash slots...</span>
+                      <span>Checking zero-clash slots across campus...</span>
                     </div>
                   ) : alternatives.length === 0 ? (
-                    <p className="text-xs text-[var(--muted)]">No contention detected for this request, or all potential alternative slots are occupied.</p>
+                    <p className="text-xs text-[var(--muted)]">No conflicts detected or all slots currently occupied.</p>
                   ) : (
                     <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                       {alternatives.map((alt, idx) => (
@@ -1068,11 +1056,11 @@ export default function SpectraEventsModule({
                             <div className="font-bold text-[var(--ink)] flex items-center gap-1.5">
                               <Building className="w-3.5 h-3.5 text-indigo-500" />
                               <span>{alt.room_name} ({alt.room_id})</span>
-                              <span className="font-normal text-[var(--muted)]">· Cap {alt.capacity}</span>
+                              <span className="font-normal text-[var(--muted)]">&bull; Cap {alt.capacity}</span>
                             </div>
                             <div className="text-[11px] text-[var(--muted)] flex items-center gap-1 mt-0.5">
                               <Clock className="w-3 h-3 text-blue-500" />
-                              <span>{alt.day} · P{alt.start_period}–P{alt.end_period}</span>
+                              <span>{alt.day} &bull; P{alt.start_period}–P{alt.end_period}</span>
                             </div>
                             <div className="text-[10px] text-[var(--muted)] italic mt-0.5">{alt.reason}</div>
                           </div>
@@ -1095,7 +1083,7 @@ export default function SpectraEventsModule({
               )}
             </div>
 
-            {/* Action Notice (Success / Error) */}
+            {/* Action Notice */}
             {actionNotice && (
               <div
                 className={`p-3 rounded-xl text-xs font-semibold ${
@@ -1108,7 +1096,7 @@ export default function SpectraEventsModule({
               </div>
             )}
 
-            {/* Rejection Form Input */}
+            {/* Rejection Form */}
             {showRejectForm && (
               <div className="p-3 rounded-xl bg-rose-50/50 dark:bg-rose-950/30 border border-rose-200 space-y-2">
                 <label className="text-[11px] font-bold text-rose-800 dark:text-rose-300 block">
@@ -1116,7 +1104,7 @@ export default function SpectraEventsModule({
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g., Venue overlap with academic lab session; curfew constraint."
+                  placeholder="e.g., Venue overlap with academic class; curfew constraint."
                   value={rejectReasonInput}
                   onChange={(e) => setRejectReasonInput(e.target.value)}
                   className="w-full p-2 text-xs rounded-lg border border-[var(--border)] bg-[var(--surface)] focus:outline-none focus:border-rose-500"
@@ -1139,13 +1127,12 @@ export default function SpectraEventsModule({
               </div>
             )}
 
-            {/* Governance Rule Checks */}
-            {/* Task 109: Prevent self-approval */}
+            {/* Self-Approval Warning */}
             {isSelfApproval && (
-              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 text-xs text-amber-800 dark:text-amber-200 flex items-start gap-2">
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 text-xs text-amber-800 dark:text-amber-200 flex items-start gap-2">
                 <ShieldAlert className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
                 <div>
-                  <div className="font-bold">Task 109 Governance Rule: Self-Approval Strictly Prohibited</div>
+                  <div className="font-bold">Task 109 Governance Rule: Self-Approval Blocked</div>
                   <div className="text-[11px] mt-0.5">
                     You cannot approve your own booking request ({selectedEvent.requester}). Approval must be executed by an independent officer from the Dean&apos;s Office.
                   </div>
@@ -1153,28 +1140,14 @@ export default function SpectraEventsModule({
               </div>
             )}
 
-            {/* Task 110: Unauthorized approval warning */}
-            {!canApproveOrReject && (
-              <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700 text-xs text-slate-700 dark:text-slate-300 flex items-start gap-2">
-                <ShieldCheck className="w-4 h-4 shrink-0 text-slate-500 mt-0.5" />
-                <div>
-                  <div className="font-bold">Task 110: Read-Only Role Permissions</div>
-                  <div className="text-[11px] mt-0.5">
-                    Your current role (<strong>{userRole}</strong>) does not have administrative approval authorization. Only Dean&apos;s Office or Department Coordinators can approve or reject requests.
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Action Buttons Row */}
+            {/* Action Buttons */}
             <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[var(--border)]">
-              {/* Cancel Button (Task 114) */}
               {canCancel && selectedEvent.status !== "cancelled" && (
                 <button
                   type="button"
                   onClick={() => handleGovernanceAction("cancel")}
                   disabled={actionLoading}
-                  className="px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 transition"
+                  className="px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 transition"
                 >
                   <Ban className="w-3.5 h-3.5 text-slate-500" />
                   <span>Cancel Booking</span>
@@ -1185,7 +1158,7 @@ export default function SpectraEventsModule({
                 <button
                   type="button"
                   onClick={() => setExplainQuery({ type: "booking_rejected", id: selectedEvent.id })}
-                  className="px-3.5 py-2 rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-300 dark:border-blue-800 hover:bg-blue-100 text-xs font-bold transition flex items-center gap-1.5"
+                  className="px-3.5 py-2 rounded-xl bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-300 text-xs font-bold transition flex items-center gap-1.5"
                 >
                   <HelpCircle className="w-3.5 h-3.5 text-blue-600" />
                   <span>Explain Rejection</span>
@@ -1193,28 +1166,25 @@ export default function SpectraEventsModule({
               )}
 
               <div className="flex items-center gap-2 ml-auto">
-                {/* Reject Button (Task 106) */}
                 {canApproveOrReject && selectedEvent.status !== "rejected" && !showRejectForm && (
                   <button
                     type="button"
                     onClick={() => setShowRejectForm(true)}
                     disabled={actionLoading}
-                    className="px-4 py-2 rounded-xl bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-300 dark:border-rose-800 hover:bg-rose-100 text-xs font-bold transition flex items-center gap-1.5"
+                    className="px-4 py-2 rounded-xl bg-rose-50 text-rose-700 border border-rose-300 hover:bg-rose-100 text-xs font-bold transition"
                   >
-                    <span>Reject</span>
+                    Reject
                   </button>
                 )}
 
-                {/* Approve Button (Task 105, 109, 110) */}
                 {canApproveOrReject && selectedEvent.status !== "approved" && (
                   <button
                     type="button"
                     onClick={() => handleGovernanceAction("approve")}
                     disabled={actionLoading || isSelfApproval}
-                    title={isSelfApproval ? "Self-approval is strictly prohibited" : undefined}
                     className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
                       isSelfApproval
-                        ? "bg-slate-300 text-slate-500 dark:bg-slate-800 dark:text-slate-600 cursor-not-allowed opacity-75"
+                        ? "bg-slate-300 text-slate-500 cursor-not-allowed opacity-75"
                         : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs"
                     }`}
                   >
@@ -1224,8 +1194,12 @@ export default function SpectraEventsModule({
                 )}
 
                 <button
-                  onClick={() => { setSelectedEvent(null); setActionNotice(null); setShowRejectForm(false); }}
-                  className="px-4 py-2 rounded-xl border border-[var(--border)] text-xs font-bold text-[var(--muted)] hover:bg-[var(--bg)]"
+                  onClick={() => {
+                    setSelectedEvent(null);
+                    setActionNotice(null);
+                    setShowRejectForm(false);
+                  }}
+                  className="px-4 py-2 rounded-xl border border-[var(--border)] text-xs font-bold text-[var(--muted)] hover:bg-[var(--search-bg)]"
                 >
                   Close
                 </button>
@@ -1235,20 +1209,20 @@ export default function SpectraEventsModule({
         </div>
       )}
 
-      {/* Task 113: Governance Decision History & Audit Trail Modal */}
+      {/* Decision History Audit Log Modal */}
       {showHistoryModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl max-w-3xl w-full p-5 sm:p-6 space-y-4 shadow-modal max-h-[85vh] flex flex-col">
+          <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl max-w-3xl w-full p-5 sm:p-6 space-y-4 shadow-2xl max-h-[85vh] flex flex-col">
             <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">
               <div className="flex items-center gap-2">
                 <History className="w-5 h-5 text-blue-600" />
-                <h3 className="text-lg font-bold text-[var(--ink)]">
-                  Governance Decision History & Audit Trail (Task 113)
+                <h3 className="text-base font-bold text-[var(--ink)]">
+                  Governance Decision History &amp; Audit Trail (Task 113)
                 </h3>
               </div>
               <button
                 onClick={() => setShowHistoryModal(false)}
-                className="p-1.5 rounded-lg border border-[var(--border)] hover:bg-[var(--bg)]"
+                className="p-1.5 rounded-lg border border-[var(--border)] hover:bg-[var(--search-bg)]"
               >
                 <X className="w-4 h-4 text-[var(--muted)]" />
               </button>
@@ -1263,11 +1237,11 @@ export default function SpectraEventsModule({
                 history.map((h, i) => (
                   <div
                     key={h.id || i}
-                    className="p-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] text-xs space-y-1.5"
+                    className="p-3 rounded-xl border border-[var(--border)] bg-[var(--search-bg)] text-xs space-y-1.5"
                   >
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <div className="flex items-center gap-2">
-                        <span className="font-mono text-[11px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 px-1.5 py-0.5 rounded">
+                        <span className="font-mono text-[11px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 px-1.5 py-0.5 rounded">
                           {h.request_id}
                         </span>
                         <span className="font-bold text-[var(--ink)]">{h.event_title}</span>
@@ -1292,7 +1266,7 @@ export default function SpectraEventsModule({
             <div className="pt-2 border-t border-[var(--border)] flex justify-end">
               <button
                 onClick={() => setShowHistoryModal(false)}
-                className="px-4 py-2 rounded-xl border border-[var(--border)] text-xs font-bold text-[var(--muted)] hover:bg-[var(--bg)]"
+                className="px-4 py-2 rounded-xl border border-[var(--border)] text-xs font-bold text-[var(--muted)] hover:bg-[var(--search-bg)]"
               >
                 Close History
               </button>

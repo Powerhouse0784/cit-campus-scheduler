@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { Search, Bell, Moon, Sun, ChevronDown, RotateCcw, ShieldCheck, Lock, LogIn, CheckCircle2 } from "lucide-react";
+import { Search, Bell, Moon, Sun, ChevronDown, RotateCcw, ShieldCheck, Lock, LogIn, CheckCircle2, Command, HelpCircle } from "lucide-react";
 import CitLogo from "@/components/CitLogo";
 import ConfirmModal from "@/components/ConfirmModal";
 import LoginModal from "@/components/LoginModal";
@@ -15,6 +15,8 @@ interface TopNavbarProps {
   activeTab?: string;
   searchQuery?: string;
   onSearchChange?: (value: string) => void;
+  onOpenPalette?: () => void;
+  onStartTour?: () => void;
 }
 
 export default function TopNavbar({
@@ -26,6 +28,8 @@ export default function TopNavbar({
   activeTab,
   searchQuery,
   onSearchChange,
+  onOpenPalette,
+  onStartTour,
 }: TopNavbarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -40,6 +44,16 @@ export default function TopNavbar({
       case "faculty": return "Dr. Amit Behera";
       case "club": return "Club Lead";
       default: return "Campus User";
+    }
+  };
+
+  const getRoleBadgeStyle = (r: string) => {
+    switch (r) {
+      case "admin": return "bg-blue-500/15 text-blue-600 dark:text-sky-300 border-blue-400/30";
+      case "department_coordinator": return "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border-emerald-400/30";
+      case "faculty": return "bg-purple-500/15 text-purple-600 dark:text-purple-300 border-purple-400/30";
+      case "club": return "bg-amber-500/15 text-amber-600 dark:text-amber-300 border-amber-400/30";
+      default: return "bg-slate-500/15 text-slate-600 dark:text-slate-300 border-slate-400/30";
     }
   };
 
@@ -58,22 +72,7 @@ export default function TopNavbar({
 
   useEffect(() => {
     syncSession();
-  }, []);
-
-  const handleRoleChange = async (newRole: string) => {
-    setRole(newRole);
-    try {
-      const res = await fetch("/api/cit/auth/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role: newRole }),
-      });
-      const data = await res.json();
-      if (data.success && data.session) {
-        setCurrentSession(data.session);
-      }
-    } catch {}
-  };
+  }, [role]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -136,15 +135,40 @@ export default function TopNavbar({
           <button
             onClick={() => setShowLoginModal(true)}
             aria-label="Authentication and credentials dialog"
-            className="hidden sm:inline-flex items-center gap-1.5 h-10 px-3.5 rounded-full border text-[12px] font-bold text-blue-600 dark:text-sky-400 hover:bg-[var(--row-hover)] transition shadow-sm"
+            title="Click to switch between Admin, Coordinator, Faculty, and Club roles in 1 click"
+            className="hidden sm:inline-flex items-center gap-2 h-10 px-3.5 rounded-full border text-[12px] font-bold text-blue-600 dark:text-sky-400 hover:bg-[var(--row-hover)] hover:scale-105 transition shadow-sm"
             style={{ borderColor: "var(--search-border)", background: "var(--surface)" }}
           >
             <Lock className="w-3.5 h-3.5 text-emerald-500" />
             <span>{currentSession?.name ? currentSession.name.split(" ")[0] : getRoleDisplayName(role)}</span>
-            <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded bg-blue-500/10 text-blue-600 dark:text-sky-300 uppercase">
-              {role}
+            <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded-md border uppercase ${getRoleBadgeStyle(role)}`}>
+              {role.replace("_", " ")}
             </span>
           </button>
+
+          {onOpenPalette && (
+            <button
+              onClick={onOpenPalette}
+              aria-label="Open quick actions (Ctrl or Command K)"
+              title="Quick actions (Ctrl/⌘ + K)"
+              className={`${pillBtn} hidden sm:flex`}
+              style={{ background: "var(--pill-bg)", boxShadow: "var(--pill-shadow)" }}
+            >
+              <Command className="w-[18px] h-[18px] text-[var(--nav-ink)]" />
+            </button>
+          )}
+
+          {onStartTour && (
+            <button
+              onClick={onStartTour}
+              aria-label="Start guided tour"
+              title="Guided tour"
+              className={`${pillBtn} hidden sm:flex`}
+              style={{ background: "var(--pill-bg)", boxShadow: "var(--pill-shadow)" }}
+            >
+              <HelpCircle className="w-[18px] h-[18px] text-[var(--nav-ink)]" />
+            </button>
+          )}
 
           <button
             onClick={toggleTheme}
@@ -160,8 +184,11 @@ export default function TopNavbar({
             className={pillBtn}
             style={{ background: "var(--pill-bg)", boxShadow: "var(--pill-shadow)" }}
           >
-            <Bell className="w-[18px] h-[18px]" />
-            <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-[var(--pill-bg)]" />
+            <Bell className="w-[18px] h-[18px] anim-bell" />
+            <span className="absolute top-2.5 right-2.5 w-2.5 h-2.5">
+              <span className="absolute inset-0 rounded-full bg-red-500 opacity-60 animate-ping" />
+              <span className="absolute inset-0 rounded-full bg-red-500 ring-2 ring-[var(--pill-bg)]" />
+            </span>
           </button>
 
           <div className="relative" ref={menuRef}>
@@ -181,12 +208,12 @@ export default function TopNavbar({
             {menuOpen && (
               <div
                 role="menu"
-                className="absolute right-0 mt-3 w-72 rounded-2xl border bg-[var(--surface)] p-4 z-50 space-y-4"
+                className="absolute right-0 mt-3 w-72 rounded-2xl border bg-[var(--surface)] p-4 z-50 space-y-4 anim-pop origin-top-right"
                 style={{ borderColor: "var(--border)", boxShadow: "0 18px 48px rgba(15, 35, 85, 0.22)" }}
               >
                 <div className="flex items-center gap-3">
                   <span className="w-10 h-10 rounded-full bg-gradient-to-br from-[#2F7BF5] to-[#123A82] text-white font-extrabold flex items-center justify-center">
-                    {role === "admin" ? "D" : role === "faculty" ? "F" : "U"}
+                    {role === "admin" ? "D" : role === "faculty" ? "F" : role === "department_coordinator" ? "C" : "U"}
                   </span>
                   <div className="leading-tight">
                     <div className="text-sm font-extrabold">{currentSession?.name || getRoleDisplayName(role)}</div>
@@ -213,17 +240,19 @@ export default function TopNavbar({
                   Sign In / Switch Account
                 </button>
 
-                <button
-                  role="menuitem"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setShowResetConfirm(true);
-                  }}
-                  className="w-full py-2 px-3 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 rounded-xl text-xs font-bold hover:bg-red-50 dark:hover:bg-red-950/20 transition flex items-center justify-center gap-1.5"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  Reset Demo Data
-                </button>
+                {role === "admin" && (
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setShowResetConfirm(true);
+                    }}
+                    className="w-full py-2 px-3 border border-red-200 dark:border-red-900/50 text-red-600 dark:text-red-400 rounded-xl text-xs font-bold hover:bg-red-50 dark:hover:bg-red-950/20 transition flex items-center justify-center gap-1.5"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Reset Demo Data
+                  </button>
+                )}
               </div>
             )}
           </div>

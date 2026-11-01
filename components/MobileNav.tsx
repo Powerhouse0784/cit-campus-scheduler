@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { Home, CalendarDays, Building2, MoreHorizontal, X } from "lucide-react";
 import { NAV_ITEMS } from "@/components/Sidebar";
 
@@ -29,10 +30,22 @@ export default function MobileNav({ activeTab, setActiveTab }: MobileNavProps) {
 
   return (
     <>
+      <AnimatePresence>
       {moreOpen && (
-        <div className="md:hidden fixed inset-0 z-40" onClick={() => setMoreOpen(false)}>
+        <motion.div
+          className="md:hidden fixed inset-0 z-40"
+          onClick={() => setMoreOpen(false)}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18 }}
+        >
           <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
-          <div
+          <motion.div
+            initial={{ y: 40, opacity: 0, scale: 0.97 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 30, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 420, damping: 34 }}
             className="absolute left-3 right-3 bottom-24 rounded-3xl border bg-[var(--surface)] p-4"
             style={{ borderColor: "var(--border)", boxShadow: "0 18px 48px rgba(15,35,85,.3)" }}
             onClick={(e) => e.stopPropagation()}
@@ -63,9 +76,10 @@ export default function MobileNav({ activeTab, setActiveTab }: MobileNavProps) {
                 );
               })}
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       <nav
         aria-label="Primary"
@@ -84,11 +98,18 @@ export default function MobileNav({ activeTab, setActiveTab }: MobileNavProps) {
               key={item.id}
               onClick={() => go(item.id)}
               aria-current={active ? "page" : undefined}
-              className={`flex flex-col items-center gap-1 py-1.5 text-[11px] font-bold transition ${
+              className={`relative flex flex-col items-center gap-1 py-1.5 text-[11px] font-bold ${
                 active ? "text-blue-600 dark:text-blue-400" : "text-[var(--muted)]"
               }`}
             >
-              <Icon className="w-[22px] h-[22px]" strokeWidth={active ? 2.4 : 1.9} />
+              {active && (
+                <motion.span
+                  layoutId="mobile-active-bar"
+                  className="absolute -top-2 inset-x-0 mx-auto h-[3px] w-9 rounded-full bg-blue-600"
+                  transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                />
+              )}
+              <Icon className={`w-[22px] h-[22px] transition-transform duration-200 ${active ? "scale-110" : ""}`} strokeWidth={active ? 2.4 : 1.9} />
               {item.label}
             </button>
           );

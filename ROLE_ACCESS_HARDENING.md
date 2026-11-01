@@ -15,3 +15,10 @@
 ## Limitations
 
 These are source-level and dataset-validator checks. They do not replace testing authenticated HTTP requests against a running deployment, nor do they establish that Supabase migrations have been applied. Run `npm ci`, `npm run typecheck`, `npm run build`, and test with demo accounts before deploying.
+
+
+## Frontend least-privilege follow-up (2026-11-01)
+
+- The application now starts in the `student` role until the server session is loaded, rather than briefly rendering Admin controls by default.
+- The Reset Demo Data menu item is rendered only for the Admin role. The server-side Admin guard remains authoritative; hiding the button is not a substitute for API authorization.
+- Verification limitation: local `npm run typecheck` could not complete because the mounted `node_modules` type packages were incomplete; `npm ci` timed out in this environment. Re-run `npm ci`, `npm run typecheck`, and `npm run build` locally before deployment.

@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { motion } from "framer-motion";
 import {
   Home,
   CalendarDays,
@@ -103,29 +104,36 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
         <CitLogo className="mb-8 px-1" />
 
         <nav className="space-y-1.5" aria-label="Main navigation">
-          {NAV_ITEMS.map((item) => {
+          {NAV_ITEMS.map((item, i) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
             return (
-              <button
+              <motion.button
                 key={item.id}
+                initial={{ opacity: 0, x: -14 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.08 + i * 0.045, duration: 0.35, ease: "easeOut" }}
+                whileHover={isActive ? undefined : { x: 4 }}
                 onClick={() => setActiveTab(item.id)}
                 aria-current={isActive ? "page" : undefined}
-                className={`w-full flex items-center gap-3.5 pl-5 pr-4 h-11 rounded-full text-[14.5px] font-semibold transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60 ${
+                className={`group relative w-full flex items-center gap-3.5 pl-5 pr-4 h-11 rounded-full text-[14.5px] font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60 ${
                   isActive ? "text-white" : "text-[var(--nav-ink)] hover:bg-[var(--nav-hover)]"
                 }`}
-                style={
-                  isActive
-                    ? { background: "var(--nav-active-bg)", boxShadow: "var(--nav-active-shadow)" }
-                    : undefined
-                }
               >
+                {isActive && (
+                  <motion.span
+                    layoutId="sidebar-active-pill"
+                    className="absolute inset-0 rounded-full"
+                    style={{ background: "var(--nav-active-bg)", boxShadow: "var(--nav-active-shadow)" }}
+                    transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                  />
+                )}
                 <Icon
-                  className="w-[18px] h-[18px] shrink-0"
+                  className="relative z-10 w-[18px] h-[18px] shrink-0 transition-transform duration-200 group-hover:scale-110"
                   strokeWidth={isActive ? 2.4 : 1.9}
                 />
-                <span>{item.label}</span>
-              </button>
+                <span className="relative z-10">{item.label}</span>
+              </motion.button>
             );
           })}
         </nav>

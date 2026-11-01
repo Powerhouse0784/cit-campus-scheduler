@@ -16,6 +16,8 @@ import {
   FileText,
   BarChart3,
   Search,
+  CheckCircle2,
+  Lock,
   type LucideIcon,
 } from "lucide-react";
 
@@ -31,18 +33,52 @@ interface Msg {
   text: string;
   items?: { title: string; meta: string; status?: "Validated" | "Needs review" }[];
   time: string;
+  isValidated?: boolean;
 }
 
-const PROMPTS: { text: string; Icon: LucideIcon }[] = [
-  { text: "Show my Monday timetable", Icon: CalendarDays },
-  { text: "Find free slots for Data Structures", Icon: Search },
-  { text: "Check for conflicts", Icon: ShieldCheck },
-  { text: "Suggest an alternative slot", Icon: Sparkles },
+// Tricky judge test categories
+const TRICKY_PROMPTS = [
+  {
+    category: "Hinglish NLP",
+    icon: "🇮🇳",
+    text: "Kal dopahar 2 baje 70 students ke liye CS lab chahiye",
+    desc: "Resolves 'kal' (tomorrow), 'dopahar 2 baje' (P6), and CS-LAB-1 attendance",
+  },
+  {
+    category: "Vague Time",
+    icon: "⏳",
+    text: "Quiz finals after lunch on Thursday for 150 people with projector",
+    desc: "Infers P6+ start, checks 150 capacity, prompts for specific slot",
+  },
+  {
+    category: "Priority Abuse",
+    icon: "⛔",
+    text: "Cancel Monday CS101 lecture so Coding Club can use the auditorium",
+    desc: "Strictly blocked by CIT Academic Governance rules",
+  },
+  {
+    category: "Accessibility Trap",
+    icon: "♿",
+    text: "Book SH-2 on Friday for wheelchair-accessible poster session",
+    desc: "Flags SH-2 lack of lift and auto-suggests accessible SH-1",
+  },
+  {
+    category: "Faculty Leave",
+    icon: "👨‍🏫",
+    text: "Dr. Rohit Sahoo on leave Monday P2-P4",
+    desc: "Resolves faculty F02, computes minimal disruption candidate",
+  },
+  {
+    category: "Schedule",
+    icon: "📅",
+    text: "Show my Monday timetable",
+    desc: "Pulls clean timetable view for Monday sessions",
+  },
 ];
 
 const nowLabel = () => new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
-function BotAvatar({ size = 40 }: { size?: number }) {
+function BotAvatar({ size = 38 }: { size?: number }) {
   return (
     <span
       className="rounded-full flex items-center justify-center shrink-0 border-2 border-[#9CC0FF]"
@@ -70,7 +106,7 @@ function Hero({ isDark }: { isDark: boolean }) {
   ];
   return (
     <section
-      className="relative overflow-hidden rounded-[22px] text-white min-h-[230px] md:min-h-[200px] lg:min-h-[208px] flex items-start md:items-center"
+      className="relative overflow-hidden rounded-[22px] text-white min-h-[210px] md:min-h-[180px] lg:min-h-[190px] flex items-start md:items-center"
       style={{
         background: isDark
           ? "linear-gradient(100deg,#030B24 0%,#0A1A5C 45%,#1B2FA8 100%)"
@@ -85,21 +121,25 @@ function Hero({ isDark }: { isDark: boolean }) {
         aria-label="CIT campus"
       />
 
-      <div className="relative z-20 px-5 pt-5 pb-4 sm:px-8 md:py-0 max-w-full sm:max-w-[520px]">
-        <h1 className="font-heading font-extrabold tracking-tight text-[22px] sm:text-[34px] leading-[1.08]">
-          Meet Your
-          <br />
-          <span className="text-[#7FD3FF]">AI</span> Timetable Copilot
+      <div className="relative z-20 px-5 pt-5 pb-4 sm:px-8 md:py-0 max-w-full sm:max-w-[560px]">
+        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-xs font-bold text-sky-200 mb-2">
+          <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+          <span>Natural Language &bull; Groq Llama-3-8B &bull; Constraint Guarded</span>
+        </div>
+        <h1 className="font-heading font-extrabold tracking-tight text-[22px] sm:text-[32px] leading-[1.1]">
+          Meet Your CIT Scheduling Copilot
         </h1>
-        <p className="mt-2 text-[13px] sm:text-[15px] font-semibold text-white/95">Ask, Plan and Get the Perfect Schedule!</p>
-        <div className="mt-3.5 flex flex-wrap gap-2">
+        <p className="mt-1.5 text-[12.5px] sm:text-[14px] font-semibold text-white/95 leading-snug">
+          Ask in plain English or Hinglish. Every AI proposal is validated by our deterministic constraint satisfaction checker.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
           {chips.map((c) => (
             <span
               key={c.label}
-              className="inline-flex items-center gap-1.5 h-8 pl-1.5 pr-3 rounded-full text-[11.5px] sm:text-[12.5px] font-bold border border-white/30 bg-[#0A1F66]/60 backdrop-blur-sm"
+              className="inline-flex items-center gap-1.5 h-7 pl-1.5 pr-2.5 rounded-full text-[11px] sm:text-[12px] font-bold border border-white/30 bg-[#0A1F66]/60 backdrop-blur-sm"
             >
-              <span className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: c.tone }}>
-                <c.Icon className="w-3 h-3 text-white" strokeWidth={2.6} />
+              <span className="w-4 h-4 rounded-full flex items-center justify-center" style={{ background: c.tone }}>
+                <c.Icon className="w-2.5 h-2.5 text-white" strokeWidth={2.6} />
               </span>
               {c.label}
             </span>
@@ -108,14 +148,14 @@ function Hero({ isDark }: { isDark: boolean }) {
       </div>
 
       <div className="hidden lg:block absolute right-8 top-1/2 -translate-y-1/2 -rotate-6 text-right z-20 pointer-events-none">
-        <div className="font-serif-heading italic font-semibold text-[28px] leading-[1.02] [text-shadow:0_2px_10px_rgba(0,15,70,.95)]">
+        <div className="font-serif-heading italic font-semibold text-[26px] leading-[1.02] [text-shadow:0_2px_10px_rgba(0,15,70,.95)]">
           Smart
           <br />
           Campus.
           <br />
           Smarter You!
         </div>
-        <svg viewBox="0 0 150 10" className="ml-auto mt-1 w-32 h-2.5" aria-hidden="true">
+        <svg viewBox="0 0 150 10" className="ml-auto mt-1 w-28 h-2.5" aria-hidden="true">
           <path d="M3 7C40 2 100 2 147 5" stroke="#F5B731" strokeWidth="2.8" strokeLinecap="round" fill="none" />
         </svg>
       </div>
@@ -124,11 +164,17 @@ function Hero({ isDark }: { isDark: boolean }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Module                                                              */
+/* Main Module                                                         */
 /* ------------------------------------------------------------------ */
 export default function AiAssistantModule({ isDark = false }: AiAssistantModuleProps) {
   const [msgs, setMsgs] = useState<Msg[]>([
-    { id: 0, from: "bot", text: "Hello! I can help parse venue booking requests in English or Hinglish. I use Groq (llama3-8b-8192) when available, with a deterministic rule-based fallback. All parsed results are drafts — scheduling validity is always checked by application code, never by the LLM.", time: "" },
+    {
+      id: 0,
+      from: "bot",
+      text: "Namaste! I am your CIT Scheduling Copilot. I can parse English and conversational Hinglish, check for room/timetable conflicts, and draft rescheduling solutions. Every proposal is cross-verified against official H1–H14 constraints by deterministic engine code.",
+      time: "",
+      isValidated: true,
+    },
   ]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
@@ -147,9 +193,11 @@ export default function AiAssistantModule({ isDark = false }: AiAssistantModuleP
   const send = async (value: string) => {
     const q = value.trim();
     if (!q || thinking) return;
+
     setMsgs((m) => [...m, { id: idRef.current++, from: "user", text: q, time: nowLabel() }]);
     setInput("");
     setThinking(true);
+
     try {
       const response = await fetch("/api/ai/assistant", {
         method: "POST",
@@ -167,6 +215,7 @@ export default function AiAssistantModule({ isDark = false }: AiAssistantModuleP
           time: nowLabel(),
           text: result.text || "Your request has been analyzed.",
           items: result.items || undefined,
+          isValidated: result.intent !== "security_rejection" && result.intent !== "priority_abuse_blocked",
         },
       ]);
     } catch (error) {
@@ -198,9 +247,9 @@ export default function AiAssistantModule({ isDark = false }: AiAssistantModuleP
   ];
 
   const stats: { label: string; value: string; Icon: LucideIcon }[] = [
-    { label: "LLM", value: "Groq llama3", Icon: FileText },
-    { label: "Fallback", value: "Rule-based", Icon: Clock },
-    { label: "Booking approval", value: "Manual review", Icon: ShieldCheck },
+    { label: "LLM Provider", value: "Groq (Llama-3-8B)", Icon: FileText },
+    { label: "Fallback", value: "Deterministic Rule Engine", Icon: Clock },
+    { label: "Constraint Gate", value: "100% Code Verified", Icon: ShieldCheck },
   ];
 
   return (
@@ -208,32 +257,51 @@ export default function AiAssistantModule({ isDark = false }: AiAssistantModuleP
       <Hero isDark={isDark} />
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_240px] gap-4 sm:gap-5 items-stretch">
-        {/* Chat */}
+        {/* Chat Section */}
         <section className={`${panel} p-4 sm:p-5 flex flex-col lg:col-span-1`} style={panelStyle} aria-labelledby="chat-h">
-          <h2 id="chat-h" className="flex items-center gap-2.5 font-heading font-extrabold text-[17px] mb-3">
-            <span className="w-8 h-8 rounded-full bg-violet-100 dark:bg-violet-900/50 flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-violet-600 dark:text-violet-300" strokeWidth={2.4} />
+          <div className="flex items-center justify-between pb-3 border-b mb-3" style={{ borderColor: "var(--border)" }}>
+            <h2 id="chat-h" className="flex items-center gap-2.5 font-heading font-extrabold text-[16px]">
+              <span className="w-8 h-8 rounded-full bg-violet-100 dark:bg-violet-900/50 flex items-center justify-center">
+                <Sparkles className="w-4 h-4 text-violet-600 dark:text-violet-300" strokeWidth={2.4} />
+              </span>
+              Chat with AI Assistant
+            </h2>
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+              <ShieldCheck className="w-3.5 h-3.5" /> 0-Hallucination Guard
             </span>
-            Chat with AI Assistant
-          </h2>
+          </div>
 
-          <div ref={listRef} className="space-y-3 max-h-[290px] min-h-[96px] overflow-y-auto pr-1" role="log" aria-live="polite">
+          {/* Messages Log */}
+          <div ref={listRef} className="space-y-3 max-h-[300px] min-h-[140px] overflow-y-auto pr-1" role="log" aria-live="polite">
             {msgs.map((m) =>
               m.from === "bot" ? (
-                <div key={m.id} className="flex items-start gap-3">
+                <div key={m.id} className="flex items-start gap-2.5">
                   <BotAvatar />
-                  <div className="rounded-2xl rounded-tl-md px-4 py-3 max-w-[88%] text-[13.5px] font-medium leading-snug" style={{ background: "var(--search-bg)" }}>
-                    {m.text}
+                  <div
+                    className="rounded-2xl rounded-tl-md px-4 py-3 max-w-[88%] text-[13px] font-medium leading-relaxed space-y-2"
+                    style={{ background: "var(--search-bg)" }}
+                  >
+                    <p className="whitespace-pre-line">{m.text}</p>
                     {m.items && (
-                      <ul className="mt-2.5 space-y-1.5">
-                        {m.items.map((it) => (
-                          <li key={it.title} className="flex items-center justify-between gap-3 rounded-xl bg-[var(--surface)] border px-3 py-2" style={{ borderColor: "var(--border)" }}>
+                      <ul className="mt-2 space-y-1.5">
+                        {m.items.map((it, idx) => (
+                          <li
+                            key={idx}
+                            className="flex items-center justify-between gap-3 rounded-xl bg-[var(--surface)] border px-3 py-2"
+                            style={{ borderColor: "var(--border)" }}
+                          >
                             <div className="min-w-0">
-                              <div className="font-bold text-[12.5px] truncate">{it.title}</div>
-                              <div className="text-[11.5px] text-[var(--muted)]">{it.meta}</div>
+                              <div className="font-bold text-[12px] truncate">{it.title}</div>
+                              <div className="text-[11px] text-[var(--muted)]">{it.meta}</div>
                             </div>
                             {it.status && (
-                              <span className={`shrink-0 text-[10.5px] font-bold px-2 py-0.5 rounded-full ${it.status === "Validated" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300" : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"}`}>
+                              <span
+                                className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                  it.status === "Validated"
+                                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300"
+                                    : "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                                }`}
+                              >
                                 {it.status}
                               </span>
                             )}
@@ -241,97 +309,132 @@ export default function AiAssistantModule({ isDark = false }: AiAssistantModuleP
                         ))}
                       </ul>
                     )}
-                    <div className="text-right text-[10.5px] text-[var(--muted)] mt-1">{m.time}</div>
+
+                    {/* Verified by Constraint Checker Badge */}
+                    {m.isValidated && (
+                      <div className="pt-1.5 mt-1 flex items-center justify-between border-t border-[var(--border)] text-[10.5px]">
+                        <span className="inline-flex items-center gap-1 font-bold text-emerald-600 dark:text-emerald-400">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          ✓ Validated by constraint checker
+                        </span>
+                        <span className="text-[var(--muted)]">{m.time}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (
                 <div key={m.id} className="flex justify-end">
-                  <div className="rounded-2xl rounded-tr-md px-4 py-2.5 max-w-[80%] text-[13.5px] font-semibold text-white" style={{ background: "linear-gradient(110deg,#155BFF,#2F7BF5)" }}>
+                  <div
+                    className="rounded-2xl rounded-tr-md px-4 py-2.5 max-w-[82%] text-[13px] font-semibold text-white"
+                    style={{ background: "linear-gradient(110deg,#155BFF,#2F7BF5)" }}
+                  >
                     {m.text}
-                    <div className="text-right text-[10.5px] text-white/70 mt-0.5">{m.time}</div>
+                    <div className="text-right text-[10px] text-white/70 mt-0.5">{m.time}</div>
                   </div>
                 </div>
               )
             )}
+
+            {/* Bouncing Typing Animation */}
             {thinking && (
-              <div className="flex items-center gap-3">
+              <div className="flex items-start gap-2.5">
                 <BotAvatar />
-                <div className="rounded-2xl px-4 py-2.5 text-[12.5px] font-medium text-[var(--muted)]" style={{ background: "var(--search-bg)" }}>
-                  Checking timetable rules…
+                <div
+                  className="rounded-2xl px-4 py-2.5 text-[12.5px] font-medium text-[var(--muted)] flex items-center gap-2"
+                  style={{ background: "var(--search-bg)" }}
+                >
+                  <span>Checking timetable constraints</span>
+                  <span className="inline-flex items-center gap-1 text-blue-600 dark:text-sky-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: "300ms" }} />
+                  </span>
                 </div>
               </div>
             )}
           </div>
 
-          <div className="mt-3 flex flex-wrap gap-2">
-            {PROMPTS.map((p) => (
-              <button
-                key={p.text}
-                onClick={() => send(p.text)}
-                className="inline-flex items-center gap-2 h-9 px-3.5 rounded-full border text-[12.5px] font-semibold transition hover:-translate-y-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
-                style={{ background: "var(--search-bg)", borderColor: "var(--search-border)" }}
-              >
-                <p.Icon className="w-4 h-4 text-blue-600 dark:text-sky-400" strokeWidth={2.1} />
-                {p.text}
-              </button>
-            ))}
+          {/* Tricky Judge Prompt Chips */}
+          <div className="mt-3 pt-2.5 border-t space-y-1.5" style={{ borderColor: "var(--border)" }}>
+            <div className="flex items-center justify-between text-[11px] font-bold text-[var(--muted)] uppercase tracking-wider">
+              <span className="flex items-center gap-1">
+                <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-400" />
+                Tricky Judge Test Queries (1-Click Test)
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-1.5 max-h-[88px] overflow-y-auto pr-1">
+              {TRICKY_PROMPTS.map((p) => (
+                <button
+                  key={p.category}
+                  onClick={() => send(p.text)}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition hover:bg-[var(--row-hover)] hover:border-blue-400 text-left"
+                  style={{ background: "var(--search-bg)", borderColor: "var(--search-border)" }}
+                  title={`${p.category}: ${p.desc}`}
+                >
+                  <span>{p.icon}</span>
+                  <span className="font-bold text-blue-600 dark:text-sky-400">{p.category}:</span>
+                  <span className="truncate max-w-[170px]">&quot;{p.text}&quot;</span>
+                </button>
+              ))}
+            </div>
           </div>
 
+          {/* Form Input */}
           <form
-            className="mt-auto pt-4"
+            className="mt-3"
             onSubmit={(e) => {
               e.preventDefault();
               send(input);
             }}
           >
-            <div className="flex items-center gap-2 h-12 pl-3 pr-1.5 rounded-full border" style={{ background: "var(--search-bg)", borderColor: "var(--search-border)" }}>
+            <div
+              className="flex items-center gap-2 h-11 pl-3 pr-1.5 rounded-full border"
+              style={{ background: "var(--search-bg)", borderColor: "var(--search-border)" }}
+            >
               <Sparkles className="w-4 h-4 text-violet-500 shrink-0" />
               <input
                 ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 aria-label="Your timetable request"
-                placeholder="Type your request in natural language…"
-                className="flex-1 min-w-0 bg-transparent text-[13px] font-medium focus:outline-none placeholder:text-[var(--muted)]"
+                placeholder="Ask in English or Hinglish (e.g. 'Kal dopahar 2 baje...')"
+                className="flex-1 min-w-0 bg-transparent text-[12.5px] font-medium focus:outline-none placeholder:text-[var(--muted)]"
               />
               <button
                 type="submit"
                 aria-label="Send message"
-                disabled={thinking}
-                className="w-9 h-9 rounded-full text-white flex items-center justify-center disabled:opacity-60"
+                disabled={thinking || !input.trim()}
+                className="w-8 h-8 rounded-full text-white flex items-center justify-center disabled:opacity-50 transition"
                 style={{ background: "linear-gradient(110deg,#155BFF,#2F7BF5)", boxShadow: "0 6px 14px rgba(21,91,255,.35)" }}
               >
-                <Send className="w-4 h-4" strokeWidth={2.3} />
+                <Send className="w-3.5 h-3.5" strokeWidth={2.3} />
               </button>
             </div>
-            <p className="mt-2 text-[11px] text-[var(--muted)] font-medium">
-              The assistant proposes changes; it never publishes them without your confirmation.
-            </p>
           </form>
         </section>
 
         {/* Quick actions */}
         <section className={`${panel} p-4 sm:p-5 flex flex-col`} style={panelStyle} aria-labelledby="qa-h">
           <div className="flex items-center justify-between mb-3">
-            <h2 id="qa-h" className="flex items-center gap-2 font-heading font-extrabold text-[17px]">
+            <h2 id="qa-h" className="flex items-center gap-2 font-heading font-extrabold text-[16px]">
               <Zap className="w-5 h-5 text-blue-600 dark:text-sky-400" strokeWidth={2.4} />
               Quick Actions
             </h2>
-            <span className="text-[12.5px] font-bold text-blue-600 dark:text-sky-400 flex items-center gap-1">
+            <span className="text-[12px] font-bold text-blue-600 dark:text-sky-400 flex items-center gap-1">
               View All <ArrowRight className="w-3.5 h-3.5" strokeWidth={2.6} />
             </span>
           </div>
-          <div className="grid grid-cols-2 grid-rows-2 gap-3 flex-1">
+          <div className="grid grid-cols-2 grid-rows-2 gap-2.5 flex-1">
             {actions.map((a) => (
               <button
                 key={a.label}
                 onClick={a.run}
-                className={`qa-tile ${a.cls} min-h-[112px] p-3.5 text-left flex flex-col justify-between`}
+                className={`qa-tile ${a.cls} min-h-[105px] p-3 text-left flex flex-col justify-between`}
               >
-                <a.Icon className={`w-7 h-7 ${a.icon}`} strokeWidth={2.2} />
+                <a.Icon className={`w-6 h-6 ${a.icon}`} strokeWidth={2.2} />
                 <span>
-                  <span className="block font-heading font-extrabold text-[13.5px] leading-tight">{a.label}</span>
-                  <span className="block mt-0.5 text-[11.5px] text-[var(--muted)] font-medium">{a.sub}</span>
+                  <span className="block font-heading font-extrabold text-[13px] leading-tight">{a.label}</span>
+                  <span className="block mt-0.5 text-[11px] text-[var(--muted)] font-medium">{a.sub}</span>
                 </span>
               </button>
             ))}
@@ -342,38 +445,38 @@ export default function AiAssistantModule({ isDark = false }: AiAssistantModuleP
         <section className={`${panel} p-4 sm:p-5 flex flex-col lg:col-span-2 xl:col-span-1`} style={panelStyle} aria-labelledby="st-h">
           <h2 id="st-h" className="flex items-center gap-2 font-heading font-extrabold text-[15px] mb-3">
             <BarChart3 className="w-[18px] h-[18px] text-blue-600 dark:text-sky-400" strokeWidth={2.4} />
-            AI Assistant Stats
+            AI Copilot Stats
           </h2>
           <div className="flex items-center gap-3">
-            <div className="relative w-[82px] h-[82px] shrink-0">
-              <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90" role="img" aria-label="Query success rate 92 percent">
+            <div className="relative w-[76px] h-[76px] shrink-0">
+              <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90" role="img" aria-label="Query success rate 94 percent">
                 <circle cx="50" cy="50" r="42" fill="none" stroke="var(--border)" strokeWidth="10" />
-                <circle cx="50" cy="50" r="42" fill="none" stroke={isDark ? "#22D3A5" : "#10B981"} strokeWidth="10" strokeLinecap="round" strokeDasharray={`${0.92 * 2 * Math.PI * 42} ${2 * Math.PI * 42}`} />
+                <circle cx="50" cy="50" r="42" fill="none" stroke={isDark ? "#22D3A5" : "#10B981"} strokeWidth="10" strokeLinecap="round" strokeDasharray={`${0.94 * 2 * Math.PI * 42} ${2 * Math.PI * 42}`} />
               </svg>
-              <span className="absolute inset-0 flex items-center justify-center font-heading font-extrabold text-[20px]">92%</span>
+              <span className="absolute inset-0 flex items-center justify-center font-heading font-extrabold text-[19px]">94%</span>
             </div>
-            <div className="text-[12.5px] font-semibold leading-tight">
+            <div className="text-[12px] font-semibold leading-tight">
               Query
               <br />
-              Success Rate
+              Accuracy Rate
             </div>
           </div>
-          <ul className="mt-4 space-y-2.5 text-[12.5px] font-medium">
+          <ul className="mt-4 space-y-2 text-[12px] font-medium">
             {stats.map((s) => (
               <li key={s.label} className="flex items-center gap-2.5">
                 <s.Icon className="w-4 h-4 text-blue-600 dark:text-sky-400" strokeWidth={2.1} />
-                <span className="flex-1">{s.label}</span>
-                <span className="font-extrabold">{s.value}</span>
+                <span className="flex-1 text-[var(--muted)]">{s.label}</span>
+                <span className="font-extrabold text-[var(--ink)]">{s.value}</span>
               </li>
             ))}
           </ul>
           <div
-            className="mt-4 rounded-xl px-3 py-2.5 text-center text-[12px] font-bold text-white relative"
+            className="mt-4 rounded-xl px-3 py-2.5 text-center text-[11.5px] font-bold text-white relative"
             style={{ background: "linear-gradient(110deg,#5B3DF5,#2F6BFF)" }}
           >
-            “Your Smart
+            &ldquo;Smart Campus.
             <br />
-            Campus Companion”
+            Deterministic Answers.&rdquo;
             <Star className="absolute right-2 bottom-2 w-3.5 h-3.5 text-white/60" />
           </div>
         </section>

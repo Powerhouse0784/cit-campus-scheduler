@@ -30,6 +30,9 @@ export async function POST(req: NextRequest) {
       sessions_count: baseline.sessions?.length || 0,
     });
   } catch (error) {
+    // Keep the diagnostic in the server terminal so reset failures can be debugged
+    // without exposing credentials or environment values.
+    console.error("[POST /api/cit/reset] Reset failed:", error);
     const message = error instanceof Error ? error.message : "Unable to reset demo data.";
     return apiError(message, 500);
   }

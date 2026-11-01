@@ -9,6 +9,48 @@ import { apiError, readJsonBody } from "@/lib/api-response";
 import path from "path";
 
 // Security blocklist for prompt injection / jailbreak attempts
+
+const WEEKDAYS: Record<string, string> = {
+  monday: "MON", mon: "MON", tuesday: "TUE", tue: "TUE", wednesday: "WED", wed: "WED",
+  thursday: "THU", thu: "THU", friday: "FRI", fri: "FRI",
+};
+
+function resolveRequestedDay(prompt: string): string | null {
+  const matches = Object.entries(WEEKDAYS).filter(([word]) => new RegExp(`\\b${word}\\b`, "i").test(prompt));
+  const days = [...new Set(matches.map(([, day]) => day))];
+  return days.length === 1 ? days[0] : null;
+}
+
+function resolveRequestedPeriods(prompt: string): number[] | null {
+  const range = prompt.match(/\b(?:p|period\s*)(\d{1,2})\s*(?:-|to|through|until)\s*(?:p|period\s*)?(\d{1,2})\b/i);
+  let periods: number[] = [];
+  if (range) {
+    const start = Number(range[1]);
+    const end = Number(range[2]);
+    if (start < 1 || end > 9 || end < start) return null;
+    periods = Array.from({ length: end - start + 1 }, (_, index) => start + index);
+  } else {
+    const single = prompt.match(/\b(?:p|period\s*)(\d{1,2})\b/i);
+    if (single) {
+      const period = Number(single[1]);
+      if (period < 1 || period > 9) return null;
+      periods = [period];
+    }
+  }
+  return periods.length ? periods : null;
+}
+
+function resolveFaculty(prompt: string, faculty: any[]): any | null {
+  const normalized = prompt.toLowerCase();
+  const exactMatches = faculty.filter((member) => {
+    const id = String(member.id || "").toLowerCase();
+    const name = String(member.name || "").toLowerCase();
+    return (id && new RegExp(`\\b${id}\\b`, "i").test(prompt)) ||
+      (name && normalized.includes(name));
+  });
+  return exactMatches.length === 1 ? exactMatches[0] : null;
+}
+
 const INJECTION_PATTERNS = [
   /ignore\s+(all\s+)?(previous|prior)\s+(instructions|prompts)/i,
   /system\s+prompt/i,
@@ -120,52 +162,79 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 5. RESCHEDULE OR EXTRA SESSION REQUEST (Solver-Powered!)
-    if (lower.includes("reschedule") || lower.includes("move") || lower.includes("extra") || lower.includes("leave") || lower.includes("swap")) {
+    // 5. RESCHEDULE REQUEST — never invent a faculty member, day, or time window.
+    if (lower.includes("reschedule") || lower.includes("move") || lower.includes("leave") || lower.includes("swap") || lower.includes("unavailable") || lower.includes("room closed") || lower.includes("room closure") || lower.includes("maintenance")) {
       if (!dataset || !schedule) return NextResponse.json({ success: false, intent: "reschedule_unavailable", source: "dynamic_rescheduling_solver", text: "Dataset or timetable is not loaded, so I cannot calculate a safe reschedule proposal yet." }, { status: 409 });
-      const solver = new ReschedulingSolver(dataset);
-      // Build a proposal only. This current parser does not reliably identify the named faculty member, so the default faculty ID is an explicit demo assumption.
-      const targetDay = lower.includes("thu") ? "THU" : lower.includes("wed") ? "WED" : "FRI";
-      const samplePayload = {
-        description: `Natural language rescheduling request: ${rawPrompt}`,
-        changes: [
-          {
-            type: "faculty_unavailable" as const,
-            faculty_id: "F01",
-            days: [targetDay],
-            periods: [1, 2, 3],
-            reason: `Requested via AI Assistant: ${rawPrompt}`,
-          },
-        ],
-      };
 
-      const result = solver.solve(schedule, samplePayload);
+      const isRoomClosure = lower.includes("room closed") || lower.includes("room closure") || lower.includes("maintenance");
+      const targetDay = resolveRequestedDay(rawPrompt);
+      const targetPeriods = resolveRequestedPeriods(rawPrompt);
+      const faculty = !isRoomClosure ? resolveFaculty(rawPrompt, Array.isArray(dataset.faculty) ? dataset.faculty : []) : null;
+      const roomMatch = isRoomClosure
+        ? (Array.isArray(dataset.rooms) ? dataset.rooms : []).find((room: any) => {
+            const id = String(room.id || "");
+            const name = String(room.name || "");
+            return (id && new RegExp(`\\b${id}\\b`, "i").test(rawPrompt)) ||
+              (name && lower.includes(name.toLowerCase()));
+          })
+        : null;
+
+      const missing: string[] = [];
+      if (isRoomClosure && !roomMatch) missing.push("room ID/name (for example AUD or LH-1)");
+      if (!isRoomClosure && !faculty) missing.push("exact faculty name or ID (for example Dr. Rohit Sahoo or F02)");
+      if (!targetDay) missing.push("one weekday (Monday–Friday)");
+      if (!targetPeriods) missing.push("a period or range (for example P2-P4)");
+      if (missing.length) {
+        return NextResponse.json({
+          success: true,
+          intent: "reschedule_needs_clarification",
+          source: "deterministic_request_parser",
+          text: `I haven't changed or proposed any schedule yet. Please specify ${missing.join(", ")}. Example: \"Dr. Rohit Sahoo on leave Monday P2-P4\".`,
+          missing_fields: missing,
+        });
+      }
+
+      const change = isRoomClosure
+        ? { type: "room_unavailable" as const, room_id: roomMatch.id, days: [targetDay], periods: targetPeriods, reason: `Room closure requested: ${rawPrompt}` }
+        : { type: "faculty_unavailable" as const, faculty_id: faculty.id, days: [targetDay], periods: targetPeriods, reason: `Faculty unavailability requested: ${rawPrompt}` };
+      const solver = new ReschedulingSolver(dataset);
+      const result = solver.solve(schedule, {
+        description: `Natural language rescheduling request: ${rawPrompt}`,
+        changes: [change],
+      });
 
       if (result.success) {
         return NextResponse.json({
           success: true,
           intent: "reschedule_solution",
           source: "dynamic_rescheduling_solver",
-          text: `🎯 Solver proposal generated using demo faculty F01 as an assumption. Confirm the faculty and run official validation before publishing. ${result.explanation}`,
-          items: result.moved_details.slice(0, 4).map((m) => ({
+          text: `A draft proposal was generated for ${isRoomClosure ? `room ${roomMatch.id}` : `${faculty.name} (${faculty.id})`} on ${targetDay}, periods ${targetPeriods.join(", ")}. This is a proposal only: review the changes and run official validation before an authorized approver publishes it. ${result.explanation || ""}`,
+          items: result.moved_details.map((m) => ({
             title: `${m.session_id} (${m.subject})`,
             meta: `Reallocated: ${m.before?.day} P${m.before?.start_period} (${m.before?.room_id}) ➔ ${m.after.day} P${m.after.start_period} in ${m.after.room_id}`,
             status: "Solver proposal — validate before publishing",
           })),
-        });
-      } else {
-        return NextResponse.json({
-          success: true,
-          intent: "reschedule_unresolvable",
-          source: "dynamic_rescheduling_solver",
-          text: `⚠️ Cannot accommodate request without constraint violations: ${result.explanation}`,
-          items: result.unresolvable.map((u) => ({
-            title: u.session_id,
-            meta: u.reason,
-            status: "Needs review",
-          })),
+          sessions_moved: result.stability.sessions_moved,
+          validation: result.validation,
         });
       }
+      return NextResponse.json({
+        success: true,
+        intent: "reschedule_unresolvable",
+        source: "dynamic_rescheduling_solver",
+        text: `No valid proposal was found for the specified disruption. No schedule was published. ${result.explanation || "Review the conflicting constraints."}`,
+        items: result.unresolvable.map((u) => ({ title: u.session_id, meta: u.reason, status: "Needs review" })),
+        validation: result.validation,
+      });
+    }
+
+    if (lower.includes("reschedule") || lower.includes("move") || lower.includes("extra session") || lower.includes("add a session")) {
+      return NextResponse.json({
+        success: true,
+        intent: "reschedule_needs_clarification",
+        source: "deterministic_request_parser",
+        text: "To propose a safe timetable change, specify the disruption type and exact target. For faculty leave, include faculty name/ID, weekday and periods (for example: Dr. Rohit Sahoo on leave Monday P2-P4). For a new session, use the authorized disruption form so course, group, duration and room requirements can be checked.",
+      });
     }
 
     // 6. DEFAULT: PARSE AS VENUE BOOKING REQUEST (English & Hinglish)

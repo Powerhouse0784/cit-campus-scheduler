@@ -16,3 +16,14 @@ next.config.mjs                     eslint.ignoreDuringBuilds so lint warnings n
 
 Optional: add real venue photos at public/images/venues/<ROOM-ID>.jpg (e.g. AUD.jpg, SH-1.jpg, CS-LAB-1.jpg).
 Without them the cards show built-in illustrations.
+
+
+--- UI motion & polish pass ---
+New (components/ui/): CountUp, Skeleton, Toast (+ToastProvider in app/layout.tsx), CommandPalette (Ctrl/Cmd+K), GuidedTour (first-visit walkthrough).
+app/globals.css     motion system: aurora background, fade-up stagger, shimmer skeletons, ken-burns hero, live pulse, modal pop-in,
+                    tactile button press. Fully disabled under prefers-reduced-motion.
+app/page.tsx        animated screen transitions + route progress bar, toast instead of alert(), command palette, guided tour (shown once; reopen via the ? button or Ctrl/Cmd+K)
+Sidebar / MobileNav sliding active indicator (framer-motion, already in package.json)
+TopNavbar           quick-actions + tour buttons, ringing bell
+Dashboard / Timetable / Venue Booking: animated counters, skeleton loaders, live "NOW" class marker, floating mascot, staggered cards
+No new npm dependencies were added.

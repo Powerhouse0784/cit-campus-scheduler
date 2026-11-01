@@ -4,20 +4,28 @@ import path from "path";
 const REST_TABLE = "cit_app_state";
 function config() {
   const url = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL)?.replace(/\/$/, "");
-  // Prefer the current Supabase secret key. The legacy service_role key remains
-  // supported for existing deployments, but must never be exposed to a browser.
-  const secretKey = process.env.SUPABASE_SECRET_KEY;
+  // Prefer the legacy service-role JWT when explicitly configured. New sb_secret_*
+  // keys are API keys (not JWTs), so they are sent as apikey only.
   const legacyServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const key = secretKey || legacyServiceRoleKey;
+  const secretKey = process.env.SUPABASE_SECRET_KEY;
+  const key = legacyServiceRoleKey || secretKey;
   if (!url || !key) return null;
   return {
     url,
-    key,
-    // New sb_secret_* keys are API keys, not JWTs; do not send them as Bearer JWTs.
-    headers: secretKey
-      ? { apikey: secretKey }
-      : { apikey: legacyServiceRoleKey!, Authorization: `Bearer ${legacyServiceRoleKey}` },
+    headers: legacyServiceRoleKey
+      ? { apikey: legacyServiceRoleKey, Authorization: `Bearer ${legacyServiceRoleKey}` }
+      : { apikey: secretKey! },
   };
+}
+
+async function responseError(operation: string, response: Response): Promise<Error> {
+  let detail = "";
+  try {
+    detail = (await response.text()).slice(0, 1200);
+  } catch {
+    // Keep the status as the useful minimum diagnostic.
+  }
+  return new Error(`${operation} failed (${response.status})${detail ? `: ${detail}` : "."}`);
 }
 function stateKey(filePath: string) {
   // Keep keys stable across local paths and serverless deployments.
@@ -60,7 +68,7 @@ export async function writeDurableJson(filePath: string, value: unknown): Promis
       },
       body: JSON.stringify({ state_key: stateKey(filePath), state_value: value, updated_at: new Date().toISOString() }),
     });
-    if (!response.ok) throw new Error(`Persistent storage write failed (${response.status}).`);
+    if (!response.ok) throw await responseError("Persistent storage write", response);
     return;
   }
   if (process.env.NODE_ENV === "production") {
@@ -81,7 +89,7 @@ export async function deleteDurableJson(filePath: string): Promise<void> {
       headers: { ...cfg.headers, Prefer: "return=minimal" },
       cache: "no-store",
     });
-    if (!response.ok) throw new Error(`Persistent storage delete failed (${response.status}).`);
+    if (!response.ok) throw await responseError("Persistent storage delete", response);
     return;
   }
   if (process.env.NODE_ENV === "production") {
@@ -112,7 +120,7 @@ async function callBookingRpc<T>(name: string, body: Record<string, unknown>): P
     body: JSON.stringify(body),
     cache: "no-store",
   });
-  if (!response.ok) throw new Error(`Atomic booking operation failed (${response.status}). Apply the latest Supabase migration and retry.`);
+  if (!response.ok) throw await responseError("Atomic booking operation", response);
   return response.json() as Promise<T>;
 }
 

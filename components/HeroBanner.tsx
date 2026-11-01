@@ -15,7 +15,7 @@ interface HeroBannerProps {
 export default function HeroBanner({ title, subtitle, isDark = false, swoosh = true }: HeroBannerProps) {
   return (
     <section
-      className="relative overflow-hidden rounded-[18px] text-white min-h-[112px] sm:min-h-[104px] flex items-center"
+      className="hero-sheen relative overflow-hidden rounded-[18px] text-white min-h-[112px] sm:min-h-[104px] flex items-center"
       style={{
         background: isDark
           ? "linear-gradient(100deg,#030B1F 0%,#07153A 45%,#0B1F58 100%)"
@@ -24,18 +24,18 @@ export default function HeroBanner({ title, subtitle, isDark = false, swoosh = t
       }}
     >
       <div
-        className="hero-img absolute bottom-0 right-0 h-[62%] w-full sm:h-full sm:w-[68%] bg-cover bg-[position:72%_100%] sm:bg-right transition-[background-image] duration-300"
+        className="hero-img hero-kenburns absolute bottom-0 right-0 h-[62%] w-full sm:h-full sm:w-[68%] bg-cover bg-[position:72%_100%] sm:bg-right transition-[background-image] duration-300"
         style={{ backgroundImage: `url(/images/hero-campus-${isDark ? "dark" : "light"}.jpg)` }}
         role="img"
         aria-label="CIT campus building"
       />
 
       <div className="relative z-10 px-5 py-4 sm:px-8 max-w-[560px]">
-        <h1 className="font-heading font-extrabold tracking-tight text-[19px] sm:text-[24px] md:text-[28px] leading-tight">
+        <h1 className="anim-fade-up font-heading font-extrabold tracking-tight text-[19px] sm:text-[24px] md:text-[28px] leading-tight">
           {title}
         </h1>
         {subtitle && (
-          <p className="hidden sm:block mt-1.5 text-[13.5px] md:text-[15px] font-medium text-white/95">{subtitle}</p>
+          <p style={{ "--i": 2 } as React.CSSProperties} className="anim-fade-up hidden sm:block mt-1.5 text-[13.5px] md:text-[15px] font-medium text-white/95">{subtitle}</p>
         )}
         {swoosh && (
           <svg viewBox="0 0 150 10" className="mt-1.5 w-24 sm:w-32 h-2" aria-hidden="true">
