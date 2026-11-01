@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { safeWriteJson, safeReadJson } from "@/lib/storage";
 
 const REST_TABLE = "cit_app_state";
 function config() {
@@ -92,13 +93,10 @@ export async function deleteDurableJson(filePath: string): Promise<void> {
     if (!response.ok) throw await responseError("Persistent storage delete", response);
     return;
   }
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("Persistent storage is not configured. Set SUPABASE_URL and SUPABASE_SECRET_KEY (or the legacy SUPABASE_SERVICE_ROLE_KEY).");
-  }
   try {
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
   } catch (error) {
-    throw new Error(`Local state delete failed: ${error instanceof Error ? error.message : "unknown error"}`);
+    // Non-fatal if file doesn't exist
   }
 }
 

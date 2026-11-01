@@ -1,13 +1,13 @@
-import { BookingRequest, BookingDecision, SessionOverride, Room, UserRole, Day } from "./types";
+import { BookingRequest, Room, UserRole, Day } from "./types";
 
-export const CAT_WEIGHT: Record<string, number> = {
+export const DEFAULT_CAT_WEIGHT: Record<string, number> = {
   institute_event: 5,
   guest_lecture: 4,
   department_event: 3,
   club_event: 2,
 };
 
-export const PRIORITY_ORDER = [
+export const DEFAULT_PRIORITY_ORDER = [
   "exam",
   "regular_session",
   "institute_event",
@@ -15,6 +15,9 @@ export const PRIORITY_ORDER = [
   "department_event",
   "club_event",
 ];
+
+export const CAT_WEIGHT = DEFAULT_CAT_WEIGHT;
+export const PRIORITY_ORDER = DEFAULT_PRIORITY_ORDER;
 
 export const ROLE_CAP: Record<string, string> = {
   admin: "institute_event",
@@ -28,7 +31,7 @@ export interface CheckAvailabilityParams {
   role?: string;
   requested_category?: string;
   attendance: number;
-  day: string;
+  day: Day | string;
   start_period: number;
   duration_periods: number;
   room_id?: string;
@@ -40,7 +43,7 @@ export interface CheckAvailabilityParams {
 export interface AlternativeVenueOption {
   room_id: string;
   room_name: string;
-  day: string;
+  day: Day;
   start_period: number;
   end_period: number;
   capacity: number;
@@ -63,19 +66,23 @@ export class BookingEngine {
   private cancellations: Set<string>;
   private rooms: Map<string, Room>;
   private dataset: any;
+  private priorityOrder: string[];
 
-  constructor(dataset: any) {
+  constructor(dataset: any, customPriorityOrder?: string[]) {
     this.dataset = dataset;
     this.requests = dataset.booking_requests || [];
     this.cancellations = new Set((dataset.cancellations || []).map((c: any) => c.request_id));
     this.rooms = new Map((dataset.rooms || []).map((r: Room) => [r.id, r]));
+    this.priorityOrder = customPriorityOrder && customPriorityOrder.length > 0
+      ? customPriorityOrder
+      : dataset.priority_order || DEFAULT_PRIORITY_ORDER;
   }
 
   public getEffectiveCategory(role: string, requestedCategory: string): string {
     const cap = ROLE_CAP[role] || "club_event";
-    const reqIndex = PRIORITY_ORDER.indexOf(requestedCategory);
-    const capIndex = PRIORITY_ORDER.indexOf(cap);
-    return PRIORITY_ORDER[Math.max(reqIndex >= 0 ? reqIndex : 5, capIndex >= 0 ? capIndex : 5)];
+    const reqIndex = this.priorityOrder.indexOf(requestedCategory);
+    const capIndex = this.priorityOrder.indexOf(cap);
+    return this.priorityOrder[Math.max(reqIndex >= 0 ? reqIndex : 5, capIndex >= 0 ? capIndex : 5)];
   }
 
   /**
@@ -92,18 +99,20 @@ export class BookingEngine {
     const duration = params.duration_periods || 1;
     const startP = params.start_period;
     const endP = startP + duration - 1;
-    const day = params.day;
+    const day = (["MON", "TUE", "WED", "THU", "FRI"].includes(String(params.day).toUpperCase())
+      ? String(params.day).toUpperCase()
+      : "THU") as Day;
     const attendance = params.attendance || 1;
     const needs = params.needs || [];
     const mandatoryGroups = params.mandatory_for_groups || [];
 
-    // 0. Role authorization check
+    // 0. Role authorization cap check
     if (params.role && params.requested_category) {
       const allowedMaxCat = ROLE_CAP[params.role] || "club_event";
-      const requestedWeight = CAT_WEIGHT[params.requested_category] || 1;
-      const allowedWeight = CAT_WEIGHT[allowedMaxCat] || 1;
-      if (requestedWeight > allowedWeight) {
-        globalConflicts.push(`Role '${params.role}' is not authorized to submit '${params.requested_category}' (maximum allowed is '${allowedMaxCat}').`);
+      const reqIdx = this.priorityOrder.indexOf(params.requested_category);
+      const capIdx = this.priorityOrder.indexOf(allowedMaxCat);
+      if (reqIdx < capIdx && reqIdx >= 0) {
+        globalConflicts.push(`Role '${params.role}' is capped at '${allowedMaxCat}' and cannot request higher priority '${params.requested_category}'.`);
       }
     }
 
@@ -179,7 +188,7 @@ export class BookingEngine {
       }
     }
 
-    // Evaluate target room candidates independently (prevents conflict bleeding between multiple candidates)
+    // Evaluate target room candidates independently
     let chosenRoom: Room | null = null;
     let available = false;
     const roomLevelRejections: string[] = [];
@@ -230,9 +239,8 @@ export class BookingEngine {
       ? []
       : [...globalConflicts, ...(targetRooms.length === 1 ? roomLevelRejections : Array.from(new Set(roomLevelRejections)).slice(0, 3))];
 
-    // If target is NOT available, find alternative venues & alternative slots (Task 92)
+    // Compute alternative slots and rooms if unavailable
     if (!available) {
-      // Find all rooms that strictly meet attendance, event permissions, accessibility, and equipment needs
       const qualifiedRooms = Array.from(this.rooms.values()).filter((r) => {
         if (!r.allowed_uses.includes("event")) return false;
         if (r.capacity < attendance) return false;
@@ -241,7 +249,6 @@ export class BookingEngine {
         return true;
       });
 
-      // 1. Same time slot in another suitable qualified venue (only if mandatory groups are not clashing)
       const groupClashInOriginalSlot = mandatoryGroups.some((g) => {
         for (let p = startP; p <= endP; p++) {
           if (grpBusy.has(`${g}:${day}:${p}`)) return true;
@@ -249,6 +256,7 @@ export class BookingEngine {
         return false;
       });
 
+      // 1. Same time slot in another suitable qualified venue
       if (!groupClashInOriginalSlot) {
         for (const alt of qualifiedRooms) {
           if (params.room_id && alt.id === params.room_id) continue;
@@ -275,10 +283,10 @@ export class BookingEngine {
         }
       }
 
-      // 2. Alternative time slots across qualified venues (guaranteed to satisfy all required facilities)
+      // 2. Alternative time slots across qualified venues
       const candidateRoomsForShift = qualifiedRooms.length > 0 ? qualifiedRooms : targetRooms;
       for (const candRoom of candidateRoomsForShift.slice(0, 3)) {
-        for (const candidateDay of ["MON", "TUE", "WED", "THU", "FRI"]) {
+        for (const candidateDay of (["MON", "TUE", "WED", "THU", "FRI"] as Day[])) {
           for (const sp of [10, 11, 6, 7, 8]) {
             if (candidateDay === day && sp === startP) continue;
             const ep = sp + duration - 1;
@@ -292,7 +300,6 @@ export class BookingEngine {
               }
             }
 
-            // Check mandatory groups for this alternative day/slot
             if (slotFree && mandatoryGroups.length > 0) {
               for (const g of mandatoryGroups) {
                 for (let p = sp; p <= ep; p++) {
@@ -314,7 +321,7 @@ export class BookingEngine {
                 end_period: ep,
                 capacity: candRoom.capacity,
                 features: candRoom.features,
-                reason: `${candRoom.name || candRoom.id} is completely available on ${candidateDay} at P${sp}–P${ep} with required facilities.`,
+                reason: `${candRoom.name || candRoom.id} is available on ${candidateDay} at P${sp}–P${ep} with required facilities.`,
               });
               break;
             }

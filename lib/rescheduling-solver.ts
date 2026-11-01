@@ -2,26 +2,31 @@
  * CIT Dynamic Disruption & Rescheduling Constraint Solver
  * 
  * Replaces all hardcoded moves with a genuine Constraint Satisfaction Search (CSP).
- * Satisfies all Hard Constraints H1–H14 and minimizes stability penalties:
+ * Re-validates the proposed schedule using the official TimetableEngine (H1–H14)
+ * and minimizes stability penalties:
  * - Prefers room-only relocation (stability penalty 1)
  * - Minimizes time-slot and day shifts (stability penalty 10)
  * - Guarantees 0 room clashes, 0 faculty double-bookings, 0 cohort overlaps.
  */
 
+import { TimetableEngine, Violation } from "./timetable-engine";
+import { Day } from "./types";
+
 export interface SessionAssignment {
   session_id: string;
-  day: string;
+  day: Day;
   start_period: number;
   room_id: string;
 }
 
 export interface DisruptionChange {
-  type: "room_unavailable" | "faculty_unavailable" | "add_session" | "cancel_session";
+  type: "room_unavailable" | "faculty_unavailable" | "add_session" | "remove_session" | "cancel_session" | "add_faculty";
   room_id?: string;
   faculty_id?: string;
-  days?: string[];
+  days?: Day[];
   periods?: number[];
   session?: any;
+  faculty?: any;
   reason?: string;
 }
 
@@ -38,8 +43,8 @@ export interface MovedSessionDetail {
   groups: string[];
   size: number;
   change_type: "room_only" | "time_shift" | "day_shift" | "added";
-  before: { day: string; start_period: number; room_id: string } | null;
-  after: { day: string; start_period: number; room_id: string };
+  before: { day: Day; start_period: number; room_id: string } | null;
+  after: { day: Day; start_period: number; room_id: string };
   reason: string;
 }
 
@@ -61,45 +66,67 @@ export interface SolverResult {
   unresolvable: Array<{ session_id: string; reason: string }>;
   validation: {
     hard_violations: number;
+    violations: Violation[];
+    soft_penalties: Record<string, number>;
+    soft_total: number;
     status: string;
   };
   explanation?: string;
 }
 
-const DAYS = ["MON", "TUE", "WED", "THU", "FRI"];
+const DAYS: Day[] = ["MON", "TUE", "WED", "THU", "FRI"];
 const PERIODS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
 export class ReschedulingSolver {
   private data: any;
 
   constructor(dataset: any) {
-    this.data = dataset;
+    this.data = JSON.parse(JSON.stringify(dataset));
   }
 
   public solve(baselineSchedule: any, disruption: DisruptionPayload): SolverResult {
+    const workingData = JSON.parse(JSON.stringify(this.data));
+
+    // Handle data-level disruption additions (faculty/session)
+    for (const ch of disruption.changes || []) {
+      if (ch.type === "add_faculty" && ch.faculty) {
+        workingData.faculty = workingData.faculty || [];
+        workingData.faculty.push(ch.faculty);
+      }
+      if (ch.type === "add_session" && ch.session) {
+        workingData.sessions = workingData.sessions || [];
+        if (!workingData.sessions.some((s: any) => s.id === ch.session.id)) {
+          workingData.sessions.push(ch.session);
+        }
+      }
+      if (ch.type === "remove_session" && (ch as any).session_id) {
+        workingData.sessions = (workingData.sessions || []).filter((s: any) => s.id !== (ch as any).session_id);
+      }
+    }
+
     const sessionMetaMap = new Map<string, any>(
-      (this.data?.sessions || []).map((s: any) => [s.id, s])
+      (workingData?.sessions || []).map((s: any) => [s.id, s])
     );
     const roomMap = new Map<string, any>(
-      (this.data?.rooms || []).map((r: any) => [r.id, r])
+      (workingData?.rooms || []).map((r: any) => [r.id, r])
     );
     const facultyMap = new Map<string, any>(
-      (this.data?.faculty || []).map((f: any) => [f.id, f])
+      (workingData?.faculty || []).map((f: any) => [f.id, f])
     );
     const courseMap = new Map<string, any>(
-      (this.data?.courses || []).map((c: any) => [c.id, c.title])
+      (workingData?.courses || []).map((c: any) => [c.id, c.title])
     );
 
-    // Track baseline unavailable windows
+    // Track baseline and disrupted unavailabilities
     const roomUnavail = new Set<string>();
-    for (const u of this.data?.room_unavailability || []) {
+    for (const u of workingData?.room_unavailability || []) {
       for (const p of u.periods) {
         roomUnavail.add(`${u.room_id}:${u.day}:${p}`);
       }
     }
 
     const facUnavail = new Set<string>();
-    for (const f of this.data?.faculty || []) {
+    for (const f of workingData?.faculty || []) {
       for (const u of f.unavailable || []) {
         for (const p of u.periods) {
           facUnavail.add(`${f.id}:${u.day}:${p}`);
@@ -107,23 +134,43 @@ export class ReschedulingSolver {
       }
     }
 
-    // Apply disruption unavailabilities
+    // Apply disruption changes into unavailability masks
     for (const ch of disruption.changes || []) {
       if (ch.type === "room_unavailable" && ch.room_id) {
-        const chDays = ch.days || DAYS;
+        const chDays: Day[] = ch.days || DAYS;
         const chPeriods = ch.periods || PERIODS;
         for (const d of chDays) {
           for (const p of chPeriods) {
             roomUnavail.add(`${ch.room_id}:${d}:${p}`);
           }
         }
+        workingData.room_unavailability = workingData.room_unavailability || [];
+        for (const d of chDays) {
+          workingData.room_unavailability.push({
+            room_id: ch.room_id,
+            day: d,
+            periods: chPeriods,
+            reason: ch.reason || "Disruption room closure",
+          });
+        }
       }
       if (ch.type === "faculty_unavailable" && ch.faculty_id) {
-        const chDays = ch.days || DAYS;
+        const chDays: Day[] = ch.days || DAYS;
         const chPeriods = ch.periods || PERIODS;
         for (const d of chDays) {
           for (const p of chPeriods) {
             facUnavail.add(`${ch.faculty_id}:${d}:${p}`);
+          }
+        }
+        const facObj = (workingData.faculty || []).find((f: any) => f.id === ch.faculty_id);
+        if (facObj) {
+          facObj.unavailable = facObj.unavailable || [];
+          for (const d of chDays) {
+            facObj.unavailable.push({
+              day: d,
+              periods: chPeriods,
+              reason: ch.reason || "Disruption faculty leave",
+            });
           }
         }
       }
@@ -134,29 +181,23 @@ export class ReschedulingSolver {
       JSON.stringify(baselineSchedule?.sessions || [])
     );
 
-    const baselineMap = new Map<string, SessionAssignment>(
-      workingAssignments.map((s) => [s.session_id, { ...s }])
-    );
-
     const cancelledSessionIds = new Set<string>();
     const sessionsToAdd: any[] = [];
 
     for (const ch of disruption.changes || []) {
-      if (ch.type === "cancel_session" && (ch as any).session_id) {
+      if ((ch.type === "cancel_session" || ch.type === "remove_session") && (ch as any).session_id) {
         cancelledSessionIds.add((ch as any).session_id);
       }
       if (ch.type === "add_session" && ch.session) {
         sessionsToAdd.push(ch.session);
-        sessionMetaMap.set(ch.session.id, ch.session);
       }
     }
 
-    // Filter out cancelled
     let activeAssignments = workingAssignments.filter(
       (s) => !cancelledSessionIds.has(s.session_id)
     );
 
-    // Identify sessions needing relocation due to conflicts with the disruption
+    // Identify sessions needing relocation
     const conflictAssignments: SessionAssignment[] = [];
     const nonConflictAssignments: SessionAssignment[] = [];
 
@@ -165,7 +206,6 @@ export class ReschedulingSolver {
       const dur = meta?.duration || 1;
       let hasConflict = false;
 
-      // Check if room is unavailable
       for (let offset = 0; offset < dur; offset++) {
         const p = s.start_period + offset;
         if (roomUnavail.has(`${s.room_id}:${s.day}:${p}`)) {
@@ -185,9 +225,8 @@ export class ReschedulingSolver {
       }
     }
 
-    // Grid tracker for non-conflicting assignments
     const isSlotOccupied = (
-      day: string,
+      day: Day,
       startPeriod: number,
       duration: number,
       roomId: string,
@@ -205,13 +244,8 @@ export class ReschedulingSolver {
         const periodsOverlap = targetPeriods.some((p) => otherPeriods.includes(p));
         if (!periodsOverlap) continue;
 
-        // Room clash
         if (other.room_id === roomId) return true;
-
-        // Faculty clash
         if (facultyId && otherMeta?.faculty_id === facultyId) return true;
-
-        // Cohort clash
         if (otherMeta?.groups && groups.some((g) => otherMeta.groups.includes(g))) return true;
       }
       return false;
@@ -220,7 +254,6 @@ export class ReschedulingSolver {
     const movedDetails: MovedSessionDetail[] = [];
     const unresolvable: Array<{ session_id: string; reason: string }> = [];
 
-    // Helper to find a legal assignment minimizing movement cost
     const solveSessionPlacement = (
       meta: any,
       original?: SessionAssignment
@@ -232,8 +265,7 @@ export class ReschedulingSolver {
       const facultyId = meta.faculty_id;
       const groups = meta.groups || [];
 
-      // Candidate rooms matching capacity and type
-      const candidateRooms = (this.data?.rooms || []).filter((r: any) => {
+      const candidateRooms = (workingData?.rooms || []).filter((r: any) => {
         if (r.type === "outdoor" || r.type === "seminar_hall" || r.id === "AUD") return false;
         if (!allowedRoomTypes.includes(r.type)) return false;
         if (r.capacity < size) return false;
@@ -245,7 +277,6 @@ export class ReschedulingSolver {
       if (original) {
         for (const r of candidateRooms) {
           if (r.id === original.room_id) continue;
-          // Check room unavailable
           let blocked = false;
           for (let off = 0; off < dur; off++) {
             if (roomUnavail.has(`${r.id}:${original.day}:${original.start_period + off}`)) {
@@ -267,17 +298,15 @@ export class ReschedulingSolver {
       }
 
       // Priority 2: Search SAME DAY, other periods (Time shift, stability penalty = 10)
-      const dayOrder = original
+      const dayOrder: Day[] = original
         ? [original.day, ...DAYS.filter((d) => d !== original.day)]
         : DAYS;
 
       for (const d of dayOrder) {
         for (let p = 1; p <= 10 - dur; p++) {
           if (original && d === original.day && p === original.start_period) continue;
-          // Skip lunch buffer for labs (P5/P6)
           if (dur >= 2 && (p === 5 || p === 6 || (p < 5 && p + dur > 5))) continue;
 
-          // Check faculty unavailable
           let fBlocked = false;
           for (let off = 0; off < dur; off++) {
             if (facUnavail.has(`${facultyId}:${d}:${p + off}`)) {
@@ -368,7 +397,7 @@ export class ReschedulingSolver {
       } else {
         unresolvable.push({
           session_id: added.id,
-          reason: `No legal slot available across teaching periods P1–P9 without double-booking student groups [${added.groups.join(", ")}].`,
+          reason: `No legal slot available across teaching periods P1–P9 without double-booking student groups [${added.groups?.join(", ")}].`,
         });
       }
     }
@@ -379,14 +408,23 @@ export class ReschedulingSolver {
     const roomOnlyCount = movedDetails.filter((m) => m.change_type === "room_only").length;
 
     const scheduleAfter = {
-      dataset_id: baselineSchedule?.dataset_id || "cit-public-v1",
+      dataset_id: baselineSchedule?.dataset_id || workingData.dataset_id || "cit-public-v1",
       sessions: nonConflictAssignments,
       exams: baselineSchedule?.exams || [],
       fest_week: baselineSchedule?.fest_week || { bookings: [] },
     };
 
+    // ------------------------------------------------------------------------
+    // RIGOROUS VALIDATION GATE VIA OFFICIAL TimetableEngine
+    // ------------------------------------------------------------------------
+    const validationEngine = new TimetableEngine(workingData);
+    const valResult = validationEngine.validate(nonConflictAssignments);
+
+    const totalHardViolations = valResult.violations.length + unresolvable.length;
+    const isClean = totalHardViolations === 0;
+
     return {
-      success: unresolvable.length === 0,
+      success: isClean,
       schedule_after: scheduleAfter,
       stability: {
         sessions_moved: movedDetails.length,
@@ -397,13 +435,15 @@ export class ReschedulingSolver {
       moved_details: movedDetails,
       unresolvable,
       validation: {
-        hard_violations: unresolvable.length,
-        status: unresolvable.length === 0 ? "Certified 0 Hard Violations" : `${unresolvable.length} Unresolved Conflicts`,
+        hard_violations: totalHardViolations,
+        violations: valResult.violations,
+        soft_penalties: valResult.softScores,
+        soft_total: valResult.softTotal,
+        status: isClean ? "Certified 0 Hard Violations" : `${totalHardViolations} Hard Violations Detected`,
       },
-      explanation:
-        unresolvable.length > 0
-          ? `Mathematical proof: ${unresolvable.map((u) => u.reason).join(" ")}`
-          : `Disruption resolved with minimal impact: ${movedDetails.length} sessions reallocated, ${roomOnlyCount} room-only moves, and ${timeChangedCount} time shifts.`,
+      explanation: isClean
+        ? `Disruption resolved cleanly: ${movedDetails.length} sessions reallocated (${roomOnlyCount} room-only, ${timeChangedCount} time shifts). 0 hard violations verified.`
+        : `Disruption has ${totalHardViolations} constraint violations: ${valResult.violations.map((v) => v.detail).join("; ")}`,
     };
   }
 }

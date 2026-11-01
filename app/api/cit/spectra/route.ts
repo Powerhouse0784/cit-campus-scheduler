@@ -3,9 +3,10 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import path from "path";
 import { apiError, readJsonBody } from "@/lib/api-response";
-import { BookingEngine, PRIORITY_ORDER, CAT_WEIGHT } from "@/lib/booking-engine";
+import { BookingEngine, DEFAULT_PRIORITY_ORDER, CAT_WEIGHT } from "@/lib/booking-engine";
 import { getAuthenticatedSession } from "@/lib/auth-session";
 import { readDurableJson, writeDurableJson } from "@/lib/durable-state";
+import { Day } from "@/lib/types";
 
 export interface DecisionHistoryItem {
   id: string;
@@ -31,6 +32,7 @@ export async function GET(req: NextRequest) {
     const schedPath = path.join(rootDir, "exports", "schedule.json");
     const overridesPath = path.join(rootDir, "data", "spectra_overrides.json");
     const historyPath = path.join(rootDir, "data", "spectra_history.json");
+    const priorityConfigPath = path.join(rootDir, "data", "priority_config.json");
 
     const data = await readDurableJson<any>(dataPath, null);
     const schedule = await readDurableJson<any>(schedPath, null);
@@ -39,22 +41,23 @@ export async function GET(req: NextRequest) {
     }
 
     let overrides: Record<string, any> = {};
-    {
-      try {
-        overrides = await readDurableJson<Record<string, any>>(overridesPath, {});
-      } catch {
-        overrides = {};
-      }
+    try {
+      overrides = await readDurableJson<Record<string, any>>(overridesPath, {});
+    } catch {
+      overrides = {};
     }
 
     let history: DecisionHistoryItem[] = [];
-    {
-      try {
-        history = await readDurableJson<DecisionHistoryItem[]>(historyPath, []);
-      } catch {
-        history = [];
-      }
+    try {
+      history = await readDurableJson<DecisionHistoryItem[]>(historyPath, []);
+    } catch {
+      history = [];
     }
+
+    const priorityOrder: string[] = await readDurableJson<string[]>(
+      priorityConfigPath,
+      data.priority_order || DEFAULT_PRIORITY_ORDER
+    );
 
     const cancellations = new Set((data.cancellations || []).map((c: any) => c.request_id));
     const schedBookingMap = new Map<string, any>(
@@ -66,18 +69,16 @@ export async function GET(req: NextRequest) {
       const dec = schedBookingMap.get(req.id);
       const isCancelled = cancellations.has(req.id) || dec?.status === "cancelled";
       const baseStatus = isCancelled ? "cancelled" : (dec?.status || "pending");
-      const baseReason = dec?.reason || (isCancelled ? "Cancelled by requesting organisation." : "Awaiting review");
 
       const override = overrides[req.id];
       const status = override?.status || baseStatus;
-      // Bug 5 fix: correctly prioritize override reason
       const reason = override?.reason || dec?.reason || (isCancelled ? "Cancelled by requesting organisation." : "Awaiting review");
 
       const roomId = override?.room_id || dec?.room_id || req.requested_room || null;
       const roomObj = roomId ? roomMap.get(roomId) : null;
 
       const category = req.requested_category || "club_event";
-      const priorityRank = PRIORITY_ORDER.indexOf(category);
+      const priorityRank = priorityOrder.indexOf(category);
       const priorityLabel = category === "institute_event"
         ? "Institute Priority"
         : category === "guest_lecture"
@@ -88,7 +89,6 @@ export async function GET(req: NextRequest) {
 
       const priorityWeight = CAT_WEIGHT[category] || 2;
 
-      // Extract day & periods
       const day = override?.day || dec?.day || req.windows?.[0]?.day || "TBD";
       const startP = override?.start_period || dec?.start_period || req.windows?.[0]?.from_period || 10;
       const endP = override?.end_period || dec?.end_period || req.windows?.[0]?.to_period || (startP + (req.duration_periods || 2) - 1);
@@ -122,7 +122,6 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    // Calculate live festival score based on official validator formula
     let bookingScore = 0.0;
     for (const ev of events) {
       if (ev.is_cancelled || cancellations.has(ev.requestId)) continue;
@@ -149,6 +148,7 @@ export async function GET(req: NextRequest) {
       metrics,
       events,
       history,
+      priority_order: priorityOrder,
       current_session: session,
     });
   } catch (error) {
@@ -158,8 +158,6 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  // Spectra POST supports decision lookups as well as mutations. Require a real
-  // campus session before exposing request-specific alternatives or allowing actions.
   const session = getAuthenticatedSession(req);
   if (session.role === "student") {
     return NextResponse.json(
@@ -178,13 +176,39 @@ export async function POST(req: NextRequest) {
     const schedPath = path.join(rootDir, "exports", "schedule.json");
     const overridesPath = path.join(rootDir, "data", "spectra_overrides.json");
     const historyPath = path.join(rootDir, "data", "spectra_history.json");
+    const priorityConfigPath = path.join(rootDir, "data", "priority_config.json");
 
     const data = await readDurableJson<any>(dataPath, null);
     const schedule = await readDurableJson<any>(schedPath, null);
     if (!data || !schedule) {
       return apiError("Dataset or schedule is missing from persistent storage.", 404);
     }
-    const engine = new BookingEngine(data);
+
+    const priorityOrder: string[] = await readDurableJson<string[]>(
+      priorityConfigPath,
+      data.priority_order || DEFAULT_PRIORITY_ORDER
+    );
+    const engine = new BookingEngine(data, priorityOrder);
+
+    const userRole = session.role;
+    const currentUser = session.name;
+
+    // ACTION: ADMIN CONFIGURABLE PRIORITY ORDER (Problem statement Item 4 requirement)
+    if (body.action === "update_priority_order") {
+      if (userRole !== "admin") {
+        return apiError("Forbidden: Only Dean's Office / Admin can reconfigure institutional priority order.", 403);
+      }
+      const newOrder = body.priority_order;
+      if (!Array.isArray(newOrder) || newOrder.length === 0) {
+        return apiError("A non-empty priority_order array is required.", 400);
+      }
+      await writeDurableJson(priorityConfigPath, newOrder);
+      return NextResponse.json({
+        success: true,
+        message: "Institutional priority order successfully updated by Admin.",
+        priority_order: newOrder,
+      });
+    }
 
     const requestId = body.request_id;
     if (!requestId) return apiError("Missing request_id.", 400);
@@ -192,28 +216,18 @@ export async function POST(req: NextRequest) {
     const targetReq = (data.booking_requests || []).find((r: any) => r.id === requestId);
     if (!targetReq) return apiError(`Request ${requestId} not found in dataset.`, 404);
 
-    // Identity was verified before request-specific data was loaded.
-    const userRole = session.role;
-    const currentUser = session.name;
-
-    // Load overrides
     let overrides: Record<string, any> = {};
-    {
-      try {
-        overrides = await readDurableJson<Record<string, any>>(overridesPath, {});
-      } catch {
-        overrides = {};
-      }
+    try {
+      overrides = await readDurableJson<Record<string, any>>(overridesPath, {});
+    } catch {
+      overrides = {};
     }
 
-    // Load history
     let history: DecisionHistoryItem[] = [];
-    {
-      try {
-        history = await readDurableJson<DecisionHistoryItem[]>(historyPath, []);
-      } catch {
-        history = [];
-      }
+    try {
+      history = await readDurableJson<DecisionHistoryItem[]>(historyPath, []);
+    } catch {
+      history = [];
     }
 
     const currentBookingInSched = (schedule.fest_week?.bookings || []).find((b: any) => b.request_id === requestId);
@@ -223,9 +237,8 @@ export async function POST(req: NextRequest) {
       reqId: string,
       status: "approved" | "rejected" | "cancelled" | "alternative_offered",
       reason: string,
-      extra?: { room_id?: string; day?: string; start_period?: number; end_period?: number }
+      extra?: { room_id?: string; day?: Day | string; start_period?: number; end_period?: number }
     ) => {
-      // 1. Update Overrides
       overrides[reqId] = {
         status,
         reason,
@@ -239,7 +252,6 @@ export async function POST(req: NextRequest) {
       };
       await writeDurableJson(overridesPath, overrides);
 
-      // 2. Synchronize schedule.json (fest_week.bookings) (Bug 3)
       if (!schedule.fest_week) schedule.fest_week = { bookings: [], session_overrides: [] };
       const existingIdx = schedule.fest_week.bookings.findIndex((b: any) => b.request_id === reqId);
       const bookingRecord = {
@@ -259,7 +271,6 @@ export async function POST(req: NextRequest) {
       }
       await writeDurableJson(schedPath, schedule);
 
-      // 3. Append to History Audit Log (Task 113)
       const historyAction: DecisionHistoryItem["action"] =
         status === "approved"
           ? "approve"
@@ -292,7 +303,7 @@ export async function POST(req: NextRequest) {
     // ACTION: GET ALTERNATIVES (Task 107 & 108)
     if (body.action === "get_alternatives") {
       const targetRoom = body.room_id || targetReq.requested_room || "AUD";
-      const targetDay = body.day || targetReq.windows?.[0]?.day || "MON";
+      const targetDay = (body.day || targetReq.windows?.[0]?.day || "MON") as Day;
       const startP = body.start_period || targetReq.windows?.[0]?.from_period || 10;
       const dur = targetReq.duration_periods || 2;
 
@@ -324,16 +335,14 @@ export async function POST(req: NextRequest) {
 
     // ACTION: APPROVE (Tasks 105, 109, 110, 115)
     if (body.action === "approve") {
-      if (userRole !== "admin" && userRole !== "department_coordinator") return apiError("Only Admin or Department Coordinator accounts may approve events.", 403);
+      if (userRole !== "admin" && userRole !== "department_coordinator") {
+        return apiError("Only Admin or Department Coordinator accounts may approve events.", 403);
+      }
       if (previousStatus !== "pending" && previousStatus !== "alternative_offered") {
         return apiError(`Only pending or alternative-offered requests can be approved (current status: ${previousStatus}).`, 409);
       }
-      // Task 110: Prevent unauthorized approvals
-      if (userRole !== "admin" && userRole !== "department_coordinator") {
-        return apiError("Unauthorized: Only Dean's Office or Department Coordinators can approve booking requests.", 403);
-      }
 
-      // Task 109: Prevent self-approval (Section 4 Governance Rule: "Nobody can approve their own request")
+      // Task 109: Prevent self-approval
       const reqName = (targetReq.requester || "").trim().toLowerCase();
       const currName = currentUser.trim().toLowerCase();
       const isSimulatedSelf = session.isSimulatedSelf === true;
@@ -351,19 +360,16 @@ export async function POST(req: NextRequest) {
         return apiError("Unauthorized: Department Coordinators cannot approve Institute Main Events. Dean's Office approval is required.", 403);
       }
 
-      // Task 115: Validate decisions with scheduling engine (Bug 3)
       const allocatedRoom = body.room_id || overrides[requestId]?.room_id || currentBookingInSched?.room_id || targetReq.requested_room || "AUD";
-      const allocatedDay = body.day || overrides[requestId]?.day || currentBookingInSched?.day || targetReq.windows?.[0]?.day || "MON";
+      const allocatedDay = (body.day || overrides[requestId]?.day || currentBookingInSched?.day || targetReq.windows?.[0]?.day || "MON") as Day;
       const startP = body.start_period || overrides[requestId]?.start_period || currentBookingInSched?.start_period || targetReq.windows?.[0]?.from_period || 10;
       const dur = targetReq.duration_periods || 2;
       const endP = startP + dur - 1;
 
-      // Check if target window matches requested windows (Validator Rule: outside requested windows must be alternative_offered)
       const insideRequestedWindow = (targetReq.windows || []).some(
         (w: any) => w.day === allocatedDay && w.from_period <= startP && endP <= w.to_period
       );
 
-      // Temporarily remove this request from schedule fest_week for fresh availability evaluation
       const tempSched = JSON.parse(JSON.stringify(schedule));
       if (tempSched.fest_week?.bookings) {
         tempSched.fest_week.bookings = tempSched.fest_week.bookings.filter((b: any) => b.request_id !== requestId);
@@ -424,7 +430,7 @@ export async function POST(req: NextRequest) {
         return apiError(`Only pending requests can receive an alternative (current status: ${previousStatus}).`, 409);
       }
       const altRoom = body.room_id;
-      const altDay = body.day;
+      const altDay = body.day as Day;
       const altStart = parseInt(body.start_period, 10);
       const altEnd = parseInt(body.end_period, 10) || (altStart + (targetReq.duration_periods || 2) - 1);
 
@@ -432,7 +438,6 @@ export async function POST(req: NextRequest) {
         return apiError("Missing alternative venue, day, or start period parameters.", 400);
       }
 
-      // Validate alternative against scheduling engine
       const tempSched = JSON.parse(JSON.stringify(schedule));
       if (tempSched.fest_week?.bookings) {
         tempSched.fest_week.bookings = tempSched.fest_week.bookings.filter((b: any) => b.request_id !== requestId);
