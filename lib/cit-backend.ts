@@ -267,22 +267,25 @@ class CITBackendService {
       .sort((a: any, b: any) => b.utilization_percent - a.utilization_percent);
 
     // Verification checklist based on official validation results
+    // Never label constraints as certified from hard-coded demo numbers. Only an
+    // attached validator report can support a verified status; otherwise disclose it.
+    const hasValidatorReport = !!report && typeof report === "object";
     const constraintsStatus = [
-      { rule: "H1", name: "Single Scheduling", desc: "Every session scheduled exactly once", status: "passed", count: "189/189" },
-      { rule: "H2", name: "Faculty Double-Booking", desc: "No instructor assigned to overlapping slots", status: "passed", count: "0 Clashes" },
-      { rule: "H3", name: "Student Cohort Clashes", desc: "No student cohort has overlapping lectures", status: "passed", count: "0 Clashes" },
-      { rule: "H4", name: "Room Double-Booking", desc: "Venues host at most one class at any time", status: "passed", count: "0 Clashes" },
-      { rule: "H5", name: "Capacity Verification", desc: "Room capacity meets or exceeds class enrollment", status: "passed", count: "100% Valid" },
-      { rule: "H6", name: "Room Type Compliance", desc: "Labs, lecture halls & classrooms strictly honored", status: "passed", count: "100% Valid" },
-      { rule: "H7", name: "Faculty Availability", desc: "Instructor unavailability leaves strictly honored", status: "passed", count: "0 Violations" },
-      { rule: "H8", name: "Room Maintenance", desc: "Routine maintenance and closure windows respected", status: "passed", count: "0 Violations" },
-      { rule: "H9", name: "Lunch & Lab Blocks", desc: "P5/P6 lunch break and 3-hour lab block rules enforced", status: "passed", count: "100% Valid" },
-      { rule: "H10", name: "Wheelchair Accessibility", desc: "Accessible-marked classes placed in lift-accessible venues", status: "passed", count: "100% Valid" },
-      { rule: "H11", name: "Elective Basket Sync", desc: "Elective baskets scheduled concurrently without clash", status: "passed", count: "Synchronized" },
-      { rule: "H12", name: "Daily Teaching Limits", desc: "Faculty max daily hours capped at 4 hours", status: "passed", count: "0 Violations" },
-      { rule: "H13", name: "Spectra Fest Bookings", desc: "Approved fest events respect room & equipment rules", status: "passed", count: "17 Approved" },
-      { rule: "H14", name: "Fixed Slot Constraints", desc: "Institutional fixed sessions assigned to exact slots", status: "passed", count: "Respected" },
-    ];
+      ["H1", "Single Scheduling", "Every session scheduled exactly once"],
+      ["H2", "Faculty Double-Booking", "No instructor assigned to overlapping slots"],
+      ["H3", "Student Cohort Clashes", "No student cohort has overlapping lectures"],
+      ["H4", "Room Double-Booking", "Venues host at most one class at any time"],
+      ["H5", "Capacity Verification", "Room capacity meets or exceeds class enrollment"],
+      ["H6", "Room Type Compliance", "Labs, lecture halls & classrooms strictly honored"],
+      ["H7", "Faculty Availability", "Instructor unavailability leaves strictly honored"],
+      ["H8", "Room Maintenance", "Routine maintenance and closure windows respected"],
+      ["H9", "Lunch & Lab Blocks", "Lunch break and lab block rules enforced"],
+      ["H10", "Wheelchair Accessibility", "Accessible-marked classes placed in accessible venues"],
+      ["H11", "Elective Basket Sync", "Elective baskets scheduled concurrently without clash"],
+      ["H12", "Daily Teaching Limits", "Faculty daily teaching limits enforced"],
+      ["H13", "Spectra Fest Bookings", "Approved fest events respect venue constraints"],
+      ["H14", "Fixed Slot Constraints", "Institutional fixed sessions assigned to exact slots"],
+    ].map(([rule, name, desc]) => ({ rule, name, desc, status: hasValidatorReport ? "report_available" : "not_verified", count: hasValidatorReport ? "See validator report" : "Not verified" }));
 
     const softPenalties = report?.soft_penalties || {
       S1: 0, S2: 10, S3: 0, S4: 3, S5: 0, S6: 0,
@@ -292,16 +295,16 @@ class CITBackendService {
       kpis: {
         room_utilization: `${util.percent}%`,
         room_utilization_num: util.percent,
-        conflicts_count: 0,
-        schedule_health: "100%",
-        health_status: "Certified 0 Violations",
-        total_sessions: this.currentSchedule?.sessions?.length || 189,
+        conflicts_count: typeof report?.hard_violations === "number" ? report.hard_violations : null,
+        schedule_health: hasValidatorReport ? (report?.hard_violations === 0 ? "Validator reports 0 hard violations" : "See validator report") : "Not verified",
+        health_status: hasValidatorReport ? "Validator report available" : "Not verified",
+        total_sessions: this.currentSchedule?.sessions?.length || 0,
         active_rooms: util.roomsUsed,
         total_rooms: util.roomsTotal,
         booked_hours: util.bookedHours,
         total_available_hours: util.availableHours,
-        booking_score: report?.bookings?.booking_score || 53.0,
-        soft_penalty_total: report?.soft_total || 13,
+        booking_score: typeof report?.bookings?.booking_score === "number" ? report.bookings.booking_score : null,
+        soft_penalty_total: typeof report?.soft_total === "number" ? report.soft_total : null,
       },
       constraints: constraintsStatus,
       soft_penalties: softPenalties,
@@ -314,10 +317,9 @@ class CITBackendService {
         { day: "Fri", hours: dayHours.FRI, pct: Math.round((dayHours.FRI / (roomBreakdown.length * 9)) * 100) },
       ],
       ai_insights: [
-        "Certified optimal baseline schedule: 0 hard-constraint violations across all 189 teaching sessions.",
-        "Elective baskets OEB-1, OEB-2, and OEB-3 are synchronized concurrently across separate rooms with 0 cohort clash.",
-        "Room CR-102 emergency disruption scenario solved with 11 minimal room reallocations and 0 time shifts.",
-        "Campus room utilization is balanced at 48.6% with prime morning slots (P2–P4) absorbing heavy lab requirements.",
+        `Current timetable contains ${this.currentSchedule?.sessions?.length || 0} scheduled sessions.`,
+        `Room utilization is ${util.percent}% based on the loaded timetable and available room periods.`,
+        hasValidatorReport ? "A validator report is available; review its rule-level results before publishing." : "No validator report is available, so constraint certification is not claimed.",
       ],
     };
   }

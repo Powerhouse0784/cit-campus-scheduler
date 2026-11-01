@@ -1,8 +1,10 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedSession } from "@/lib/auth-session";
 import { ReschedulingSolver } from "@/lib/rescheduling-solver";
 import { parseHinglishOrEnglishRequest } from "@/lib/ai-parser";
-import { safeReadJson } from "@/lib/storage";
+import { readDurableJson } from "@/lib/durable-state";
 import { apiError, readJsonBody } from "@/lib/api-response";
 import path from "path";
 
@@ -24,10 +26,11 @@ export async function POST(req: NextRequest) {
     const parsed = await readJsonBody<{ prompt?: string; role?: string }>(req);
     if (!parsed.success) return parsed.response;
 
-    const rawPrompt = (parsed.data?.prompt || "").trim();
+    const rawPrompt = typeof parsed.data?.prompt === "string" ? parsed.data.prompt.trim() : "";
     if (!rawPrompt) {
       return apiError("A prompt is required.", 400);
     }
+    if (rawPrompt.length > 2000) return apiError("Prompt must be 2,000 characters or fewer.", 413);
 
     const session = getAuthenticatedSession(req);
     const userRole = session.role;
@@ -62,21 +65,31 @@ export async function POST(req: NextRequest) {
     const rootDir = process.cwd();
     const dataPath = path.join(rootDir, "data", "cit_public.json");
     const schedPath = path.join(rootDir, "exports", "schedule.json");
-    const dataset = safeReadJson(dataPath, null);
-    const schedule = safeReadJson(schedPath, null);
+    const reportPath = path.join(rootDir, "exports", "validation_report.json");
+    const [dataset, schedule, validationReport] = await Promise.all([
+      readDurableJson<any>(dataPath, null),
+      readDurableJson<any>(schedPath, null),
+      readDurableJson<any>(reportPath, null),
+    ]);
 
     // 3. CONFLICT CHECK QUERY
     if (lower.includes("conflict") || lower.includes("clash") || lower.includes("check")) {
+      if (!dataset || !schedule) {
+        return NextResponse.json({ success: true, intent: "conflict_check", source: "constraint_engine", text: "I couldn't load the active dataset and timetable, so I can't verify conflicts yet. Load the dataset and generate a schedule first.", items: [] });
+      }
+      const sessions = Array.isArray(schedule.sessions) ? schedule.sessions : [];
+      const hardViolations = validationReport?.hard_violations ?? validationReport?.hardViolations;
+      const isValidated = typeof hardViolations === "number";
       return NextResponse.json({
         success: true,
         intent: "conflict_check",
         source: "constraint_engine",
-        text: "✅ Timetable Integrity Certified: Zero hard conflicts detected across all 189 scheduled teaching sessions, 24 exam slots, and 17 approved fest bookings. All student cohorts and instructors are clash-free.",
+        text: isValidated
+          ? `The latest saved validation report records ${hardViolations} hard-constraint violation(s) for the report's schedule. The active timetable contains ${sessions.length} sessions. Re-run validation after any schedule change to ensure this report is current.`
+          : `The active timetable contains ${sessions.length} sessions, but no usable validation report is available. I won't label it conflict-free until the official validator has run.`,
         items: [
-          { title: "H1–H4 Double Bookings", meta: "0 room, faculty, or cohort overlaps", status: "Validated" },
-          { title: "H5 Room Capacity", meta: "100% compliant across 24 active teaching venues", status: "Validated" },
-          { title: "H9 Lunch Window Protection", meta: "P5/P6 buffers strictly preserved", status: "Validated" },
-          { title: "Soft Penalties", meta: "Optimized at 13 penalty score (S2=10, S4=3)", status: "Validated" },
+          { title: "Active sessions", meta: String(sessions.length), status: "Loaded" },
+          { title: "Validation report", meta: isValidated ? `${hardViolations} hard violations reported; report freshness must be checked` : "Not available — run official validator", status: isValidated ? "Report available" : "Needs validation" },
         ],
       });
     }
@@ -89,26 +102,29 @@ export async function POST(req: NextRequest) {
       if (lower.includes("thu")) targetDay = "THU";
       if (lower.includes("fri")) targetDay = "FRI";
 
-      const daySessions = (schedule?.sessions || []).filter((s: any) => s.day === targetDay).slice(0, 5);
-      const courseMap = new Map((dataset?.courses || []).map((c: any) => [c.id, c.title]));
+      if (!dataset || !schedule) return NextResponse.json({ success: true, intent: "timetable_query", source: "timetable_engine", text: "The active dataset or timetable is not loaded yet.", items: [] });
+      const daySessions = (schedule.sessions || []).filter((s: any) => s.day === targetDay).slice(0, 5);
+      const sessionMap = new Map((dataset.sessions || []).map((item: any) => [item.id, item]));
+      const courseMap = new Map((dataset.courses || []).map((c: any) => [c.id, c.title]));
 
       return NextResponse.json({
         success: true,
         intent: "timetable_query",
         source: "timetable_engine",
-        text: `Here is the schedule overview for ${targetDay}: ${daySessions.length} sessions scheduled with zero room or instructor clashes.`,
+        text: `Here is the schedule overview for ${targetDay}: ${daySessions.length} sessions found. This is a timetable view only; room and instructor clashes are not certified unless the official validator has run on this exact schedule.`,
         items: daySessions.map((s: any) => ({
-          title: `${s.session_id}: ${courseMap.get(s.session_id.split("-")[0]) || "Lecture"}`,
+          title: `${s.session_id}: ${courseMap.get((sessionMap.get(s.session_id) as any)?.course_id) || (sessionMap.get(s.session_id) as any)?.course_id || "Session"}`,
           meta: `${s.day} Period P${s.start_period} in Room ${s.room_id}`,
-          status: "Validated",
+          status: "Scheduled — validation status not inferred",
         })),
       });
     }
 
     // 5. RESCHEDULE OR EXTRA SESSION REQUEST (Solver-Powered!)
     if (lower.includes("reschedule") || lower.includes("move") || lower.includes("extra") || lower.includes("leave") || lower.includes("swap")) {
+      if (!dataset || !schedule) return NextResponse.json({ success: false, intent: "reschedule_unavailable", source: "dynamic_rescheduling_solver", text: "Dataset or timetable is not loaded, so I cannot calculate a safe reschedule proposal yet." }, { status: 409 });
       const solver = new ReschedulingSolver(dataset);
-      // Example simulated faculty leave or extra session based on prompt
+      // Build a proposal only. This current parser does not reliably identify the named faculty member, so the default faculty ID is an explicit demo assumption.
       const targetDay = lower.includes("thu") ? "THU" : lower.includes("wed") ? "WED" : "FRI";
       const samplePayload = {
         description: `Natural language rescheduling request: ${rawPrompt}`,
@@ -130,11 +146,11 @@ export async function POST(req: NextRequest) {
           success: true,
           intent: "reschedule_solution",
           source: "dynamic_rescheduling_solver",
-          text: `🎯 Solver Resolution Found: ${result.explanation}`,
+          text: `🎯 Solver proposal generated using demo faculty F01 as an assumption. Confirm the faculty and run official validation before publishing. ${result.explanation}`,
           items: result.moved_details.slice(0, 4).map((m) => ({
             title: `${m.session_id} (${m.subject})`,
             meta: `Reallocated: ${m.before?.day} P${m.before?.start_period} (${m.before?.room_id}) ➔ ${m.after.day} P${m.after.start_period} in ${m.after.room_id}`,
-            status: "Validated",
+            status: "Solver proposal — validate before publishing",
           })),
         });
       } else {

@@ -1,11 +1,18 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 import path from "path";
+import { randomUUID } from "crypto";
 import { BookingEngine } from "@/lib/booking-engine";
 import { apiError, readJsonBody } from "@/lib/api-response";
 import { getAuthenticatedSession } from "@/lib/auth-session";
-import { readDurableJson, writeDurableJson } from "@/lib/durable-state";
+import { authorizeRoles } from "@/lib/api-auth";
+import { readDurableJson, writeDurableJson, submitBookingAtomically, transitionBookingAtomically } from "@/lib/durable-state";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = authorizeRoles(req, ["admin", "department_coordinator", "faculty", "club"]);
+  if (auth.ok === false) return auth.response;
+
   try {
     const rootDir = process.cwd();
     const dataPath = path.join(rootDir, "data", "cit_public.json");
@@ -105,7 +112,7 @@ export async function POST(req: NextRequest) {
     if (body.action === "check") {
       const result = engine.checkAvailability(
         {
-          title: body.title,
+          title: typeof body.title === "string" ? body.title.trim() : "Campus Booking",
           role: userRole,
           requested_category: body.category || "club_event",
           attendance: parseInt(body.attendance, 10) || 50,
@@ -129,17 +136,24 @@ export async function POST(req: NextRequest) {
     // 2. ACTION: SUBMIT BOOKING (Tasks 87, 88)
     if (body.action === "submit") {
       if (userRole === "student") return apiError("Please sign in with an authorized campus account to submit a booking.", 401);
-      const attendance = parseInt(body.attendance, 10) || 50;
-      const duration = parseInt(body.duration_periods, 10) || 2;
-      const startP = parseInt(body.start_period, 10) || 10;
+      const title = typeof body.title === "string" ? body.title.trim() : "";
+      if (!title || title.length > 160) return apiError("Booking title is required and must be 160 characters or fewer.", 400);
+      const attendance = Number(body.attendance ?? 50);
+      const duration = Number(body.duration_periods ?? 2);
+      const startP = Number(body.start_period ?? 10);
+      const day = typeof body.day === "string" ? body.day.trim().toUpperCase() : "THU";
+      const roomId = typeof body.room_id === "string" && body.room_id.trim() ? body.room_id.trim() : "AUD";
+      const allowedDays = new Set(["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]);
+      if (!Number.isInteger(attendance) || attendance < 1 || attendance > 10000) return apiError("Attendance must be a whole number between 1 and 10000.", 400);
+      if (!Number.isInteger(duration) || duration < 1 || duration > 13) return apiError("Duration must be a whole number between 1 and 13 periods.", 400);
+      if (!Number.isInteger(startP) || startP < 1 || startP > 13 || startP + duration - 1 > 13) return apiError("Start period and duration must fit within periods 1–13.", 400);
+      if (!allowedDays.has(day)) return apiError("Day must be a valid weekday abbreviation.", 400);
       const endP = startP + duration - 1;
-      const day = body.day || "THU";
-      const roomId = body.room_id || "AUD";
 
       // Verify availability deterministically
       const checkResult = engine.checkAvailability(
         {
-          title: body.title,
+          title,
           role: userRole,
           requested_category: body.category || "club_event",
           attendance,
@@ -164,11 +178,12 @@ export async function POST(req: NextRequest) {
         status = "pending";
       }
 
-      const newBookingId = `UB-${Date.now().toString().slice(-4)}`;
+      const newBookingId = `UB-${randomUUID()}`;
 
       const newBooking = {
         request_id: newBookingId,
-        title: body.title || "Campus Booking",
+        requester_id: session.id,
+        title,
         requester,
         role: userRole,
         category: body.category || "club_event",
@@ -186,17 +201,11 @@ export async function POST(req: NextRequest) {
         is_user_created: true,
       };
 
-      // Persist in user_bookings.json
-      let userBookings: any[] = [];
-      {
-        try {
-          userBookings = await readDurableJson<any[]>(userBookingsPath, []);
-        } catch {
-          userBookings = [];
-        }
+      // Use a database transaction to serialize room/time reservations and prevent lost updates.
+      const submission = await submitBookingAtomically(newBooking, userBookingsPath, schedPath);
+      if (!submission.success) {
+        return NextResponse.json({ success: false, error: submission.error || "Booking could not be reserved.", conflict: submission.conflict }, { status: 409 });
       }
-      userBookings.unshift(newBooking);
-      await writeDurableJson(userBookingsPath, userBookings);
 
       const message = status === "pending"
         ? "Booking submitted successfully. It is now pending Dean's Office / Coordinator review."
@@ -235,40 +244,48 @@ export async function POST(req: NextRequest) {
 
       const target = userBookings.find((b) => b.request_id === requestId);
       if (!target) return apiError(`Booking ${requestId} not found in pending records.`, 404);
-      if (String(target.requester || "").trim().toLowerCase() === String(requester || "").trim().toLowerCase()) {
+      if ((target.requester_id && target.requester_id === session.id) ||
+          String(target.requester || "").trim().toLowerCase() === String(requester || "").trim().toLowerCase()) {
         return apiError("Governance violation: you cannot approve your own booking request.", 403);
       }
       if (target.status !== "pending") {
         return apiError(`Only pending bookings can be approved (current status: ${target.status}).`, 409);
       }
 
-      target.status = "approved";
-      target.reason = `Approved by ${requester} (${userRole}).`;
-      await writeDurableJson(userBookingsPath, userBookings);
-
-      // Also register in schedule.json
-      if (!schedule.fest_week) schedule.fest_week = { bookings: [], session_overrides: [] };
-      const existing = schedule.fest_week.bookings.find((b: any) => b.request_id === requestId);
-      if (existing) {
-        existing.status = "approved";
-        existing.reason = target.reason;
-      } else {
-        schedule.fest_week.bookings.push({
-          request_id: target.request_id,
-          status: "approved",
-          day: target.day,
-          start_period: target.start_period,
-          end_period: target.end_period,
-          room_id: target.room_id,
-          reason: target.reason,
-        });
+      // Re-check availability at approval time; submission-time availability can go stale.
+      const currentSchedule = JSON.parse(JSON.stringify(schedule));
+      if (currentSchedule.fest_week?.bookings) {
+        currentSchedule.fest_week.bookings = currentSchedule.fest_week.bookings.filter((b: any) => b.request_id !== requestId);
       }
-      await writeDurableJson(schedPath, schedule);
+      const approvalCheck = engine.checkAvailability({
+        title: target.title,
+        role: target.role,
+        requested_category: target.category || "club_event",
+        attendance: target.attendance,
+        day: target.day,
+        start_period: target.start_period,
+        duration_periods: target.end_period - target.start_period + 1,
+        room_id: target.room_id,
+      }, currentSchedule);
+      if (!approvalCheck.available) {
+        return NextResponse.json({
+          success: false,
+          error: "Booking cannot be approved because availability changed since submission.",
+          validation: approvalCheck,
+          alternatives: approvalCheck.alternatives,
+        }, { status: 409 });
+      }
+
+      const approvalReason = `Approved by ${requester} (${userRole}).`;
+      const transition = await transitionBookingAtomically(requestId, "pending", "approved", approvalReason, userBookingsPath, schedPath);
+      if (!transition.success) {
+        return NextResponse.json({ success: false, error: transition.error || "Booking could not be approved.", conflict: transition.conflict }, { status: transition.status_code || 409 });
+      }
 
       return NextResponse.json({
         success: true,
         message: `Booking ${requestId} has been approved.`,
-        booking: target,
+        booking: transition.booking,
       });
     }
 
@@ -304,23 +321,23 @@ export async function POST(req: NextRequest) {
         if (!requester) {
           return apiError("Unauthorized: Requester identity is required to verify ownership before cancellation.", 401);
         }
-        const isOwner = requester.trim().toLowerCase() === String(bookingOwner || "").trim().toLowerCase();
+        const isOwner = inUserBookings?.requester_id
+          ? inUserBookings.requester_id === session.id
+          : requester.trim().toLowerCase() === String(bookingOwner || "").trim().toLowerCase();
         if (!isOwner) {
           return apiError(`Forbidden: You do not have permission to cancel another user's booking (owned by ${bookingOwner}).`, 403);
         }
       }
 
-      // Mark cancelled in user_bookings.json
+      const cancellationReason = `Booking cancelled by ${requester || userRole}.`;
       if (inUserBookings) {
-        inUserBookings.status = "cancelled";
-        inUserBookings.reason = `Booking cancelled by ${requester || userRole}.`;
-        await writeDurableJson(userBookingsPath, userBookings);
-      }
-
-      // Mark CANCELLED (not "rejected"!) in schedule.json
-      if (inSchedBookings) {
+        if (inUserBookings.status === "cancelled") return apiError("Booking is already cancelled.", 409);
+        const transition = await transitionBookingAtomically(requestId, inUserBookings.status, "cancelled", cancellationReason, userBookingsPath, schedPath);
+        if (!transition.success) return NextResponse.json({ success: false, error: transition.error || "Booking could not be cancelled." }, { status: transition.status_code || 409 });
+      } else if (inSchedBookings) {
+        // Legacy/scheduler-only bookings are not in the user booking queue.
         inSchedBookings.status = "cancelled";
-        inSchedBookings.reason = `Booking cancelled by ${requester || userRole}.`;
+        inSchedBookings.reason = cancellationReason;
         await writeDurableJson(schedPath, schedule);
       }
 

@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 /** Compatibility endpoint for older clients. Uses the same durable solver workflow. */
 import { NextRequest, NextResponse } from "next/server";
 import path from "path";

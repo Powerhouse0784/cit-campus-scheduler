@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 import path from "path";
 import { apiError, readJsonBody } from "@/lib/api-response";
@@ -156,6 +158,16 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // Spectra POST supports decision lookups as well as mutations. Require a real
+  // campus session before exposing request-specific alternatives or allowing actions.
+  const session = getAuthenticatedSession(req);
+  if (session.role === "student") {
+    return NextResponse.json(
+      { success: false, error: "Unauthorized", message: "Sign in with an authorized campus account to access Spectra booking workflows." },
+      { status: 401 }
+    );
+  }
+
   try {
     const parsed = await readJsonBody<Record<string, any>>(req);
     if (!parsed.success) return parsed.response;
@@ -180,8 +192,7 @@ export async function POST(req: NextRequest) {
     const targetReq = (data.booking_requests || []).find((r: any) => r.id === requestId);
     if (!targetReq) return apiError(`Request ${requestId} not found in dataset.`, 404);
 
-    // 1. Authenticated Server-Side Identity (Bug 1 & Bug 2)
-    const session = getAuthenticatedSession(req);
+    // Identity was verified before request-specific data was loaded.
     const userRole = session.role;
     const currentUser = session.name;
 

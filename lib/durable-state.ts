@@ -93,3 +93,100 @@ export async function deleteDurableJson(filePath: string): Promise<void> {
     throw new Error(`Local state delete failed: ${error instanceof Error ? error.message : "unknown error"}`);
   }
 }
+
+export type AtomicBookingResult = {
+  success: boolean;
+  booking?: any;
+  error?: string;
+  conflict?: any;
+  status_code?: number;
+  current_status?: string;
+};
+
+async function callBookingRpc<T>(name: string, body: Record<string, unknown>): Promise<T> {
+  const cfg = config();
+  if (!cfg) throw new Error("Atomic booking operations require configured Supabase storage in production.");
+  const response = await fetch(`${cfg.url}/rest/v1/rpc/${name}`, {
+    method: "POST",
+    headers: { ...cfg.headers, "Content-Type": "application/json", Prefer: "return=representation" },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Atomic booking operation failed (${response.status}). Apply the latest Supabase migration and retry.`);
+  return response.json() as Promise<T>;
+}
+
+/** Atomically reserves a booking in Supabase, serializing concurrent room/time submissions. */
+export async function submitBookingAtomically(
+  booking: Record<string, any>,
+  bookingsPath: string,
+  schedulePath: string,
+): Promise<AtomicBookingResult> {
+  if (config()) {
+    return callBookingRpc<AtomicBookingResult>("cit_submit_booking", {
+      p_booking: booking,
+      p_bookings_key: stateKey(bookingsPath),
+      p_schedule_key: stateKey(schedulePath),
+    });
+  }
+  if (process.env.NODE_ENV === "production") throw new Error("Atomic booking operations require Supabase RPC configuration.");
+  const bookings = await readDurableJson<any[]>(bookingsPath, []);
+  const schedule = await readDurableJson<any>(schedulePath, {});
+  if (bookings.some((item) => item.request_id === booking.request_id)) return { success: false, error: "Booking request already exists." };
+  if (["pending", "approved"].includes(String(booking.status))) {
+    const busy = [
+      ...(schedule.fest_week?.bookings || []).filter((item: any) => ["approved", "scheduled"].includes(item.status)),
+      ...bookings.filter((item: any) => ["pending", "approved"].includes(item.status)),
+    ];
+    const conflict = busy.find((item: any) => item.room_id === booking.room_id && item.day === booking.day &&
+      Number(item.start_period) <= Number(booking.end_period) && Number(item.end_period) >= Number(booking.start_period));
+    if (conflict) return { success: false, error: "Room/time slot was reserved by another request.", conflict };
+  }
+  await writeDurableJson(bookingsPath, [booking, ...bookings]);
+  return { success: true, booking };
+}
+
+/** Atomically transitions a booking and mirrors its status into the schedule in Supabase. */
+export async function transitionBookingAtomically(
+  requestId: string,
+  expectedStatus: string,
+  newStatus: "approved" | "cancelled",
+  reason: string,
+  bookingsPath: string,
+  schedulePath: string,
+): Promise<AtomicBookingResult> {
+  if (config()) {
+    return callBookingRpc<AtomicBookingResult>("cit_transition_booking", {
+      p_request_id: requestId,
+      p_expected_status: expectedStatus,
+      p_new_status: newStatus,
+      p_reason: reason,
+      p_bookings_key: stateKey(bookingsPath),
+      p_schedule_key: stateKey(schedulePath),
+    });
+  }
+  if (process.env.NODE_ENV === "production") throw new Error("Atomic booking operations require Supabase RPC configuration.");
+  const bookings = await readDurableJson<any[]>(bookingsPath, []);
+  const schedule = await readDurableJson<any>(schedulePath, {});
+  const target = bookings.find((item) => item.request_id === requestId);
+  if (!target) return { success: false, error: "Booking not found.", status_code: 404 };
+  if (target.status !== expectedStatus) return { success: false, error: "Booking status changed; refresh and retry.", status_code: 409, current_status: target.status };
+  if (newStatus === "approved") {
+    const busy = [
+      ...(schedule.fest_week?.bookings || []).filter((item: any) => ["approved", "scheduled"].includes(item.status)),
+      ...bookings.filter((item: any) => item.request_id !== requestId && ["pending", "approved"].includes(item.status)),
+    ];
+    const conflict = busy.find((item: any) => item.room_id === target.room_id && item.day === target.day &&
+      Number(item.start_period) <= Number(target.end_period) && Number(item.end_period) >= Number(target.start_period));
+    if (conflict) return { success: false, error: "Room/time slot was reserved by another request.", conflict, status_code: 409 };
+  }
+  const updated = { ...target, status: newStatus, reason };
+  await writeDurableJson(bookingsPath, bookings.map((item) => item.request_id === requestId ? updated : item));
+  const scheduleBookings = schedule.fest_week?.bookings || [];
+  const found = scheduleBookings.some((item: any) => item.request_id === requestId);
+  schedule.fest_week = { ...(schedule.fest_week || {}), bookings: found
+    ? scheduleBookings.map((item: any) => item.request_id === requestId ? { ...item, status: newStatus, reason } : item)
+    : newStatus === "approved" ? [...scheduleBookings, { request_id: requestId, status: newStatus, day: target.day, start_period: target.start_period, end_period: target.end_period, room_id: target.room_id, reason }] : scheduleBookings };
+  await writeDurableJson(schedulePath, schedule);
+  return { success: true, booking: updated };
+}

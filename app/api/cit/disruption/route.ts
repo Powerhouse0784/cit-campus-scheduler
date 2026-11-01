@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 import path from "path";
 import { apiError, readJsonBody } from "@/lib/api-response";
@@ -5,7 +7,10 @@ import { authorizeRoles, SCHEDULER_ROLES } from "@/lib/api-auth";
 import { readDurableJson, writeDurableJson } from "@/lib/durable-state";
 import { ReschedulingSolver, DisruptionPayload } from "@/lib/rescheduling-solver";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = authorizeRoles(req, SCHEDULER_ROLES);
+  if (auth.ok === false) return auth.response;
+
   try {
     const root = process.cwd();
     const [baseline, proposed] = await Promise.all([
@@ -43,8 +48,16 @@ export async function POST(req: NextRequest) {
       }
       const proposed = await readDurableJson<any>(proposedPath, null);
       if (!proposed) return apiError("No proposed schedule is available to publish.", 404);
-      if (proposed.validation?.hard_violations > 0 || proposed.solver_success !== true) {
-        return apiError("The proposed schedule has unresolved hard violations and cannot be published.", 409);
+      const validation = proposed.validation;
+      const hasExplicitCleanValidation =
+        validation &&
+        validation.hard_violations === 0 &&
+        validation.status === "Certified 0 Hard Violations";
+      if (proposed.solver_success !== true || !hasExplicitCleanValidation) {
+        return apiError(
+          "The proposed schedule cannot be published without an explicit successful solver result and a clean validation report (zero hard violations).",
+          409
+        );
       }
       const publishedSchedule = { ...proposed };
       delete publishedSchedule.validation;

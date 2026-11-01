@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 import { readDurableJson, writeDurableJson } from "@/lib/durable-state";
 import { authorizeRoles } from "@/lib/api-auth";

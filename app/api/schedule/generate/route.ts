@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
 import { generateSchedulePure } from "@/lib/schedule-generator-pure";
 import { apiError } from "@/lib/api-response";
