@@ -106,23 +106,25 @@ export default function DashboardModule({ onNavigateTab, isDark = false }: Dashb
           role="img"
           aria-label="CIT campus architecture"
         />
-        <div className="relative z-10 px-6 pt-6 pb-4 sm:px-10 md:py-0 max-w-[620px] space-y-1.5">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-xs font-bold text-sky-200">
+        <div className="relative z-10 px-6 pt-6 pb-4 sm:px-10 md:py-0 max-w-[560px] space-y-2">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/15 backdrop-blur-md border border-white/25 text-[11px] font-extrabold text-emerald-300">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Official Crunch Week Timetable &bull; 0 Hard Clashes Certified</span>
+            <span>0 Hard Clashes Certified &bull; Official Timetable</span>
           </div>
 
-          <h1 className="anim-fade-up font-heading font-extrabold tracking-tight text-[26px] sm:text-[34px] leading-tight flex items-center gap-2.5">
+          <h1 className="anim-fade-up font-heading font-extrabold tracking-tight text-[28px] sm:text-[38px] leading-none flex items-center gap-2.5 text-white">
             <span>{greeting}</span>
             <span aria-hidden="true" className="inline-block origin-[70%_70%] animate-[wave_2.6s_ease-in-out_infinite]">
               👋
             </span>
           </h1>
-          <p className="anim-fade-up text-[15px] sm:text-xl font-bold leading-snug">
+
+          <p className="anim-fade-up text-sm sm:text-[17px] font-bold text-white/95 leading-snug">
             Welcome to CIT Campus Scheduler
           </p>
-          <p className="anim-fade-up text-xs sm:text-sm italic font-medium text-white/90">
-            Smart Scheduling. A Better Campus. Deterministic Solver Active.
+
+          <p className="anim-fade-up text-xs sm:text-[13px] font-medium text-sky-100/90 tracking-wide">
+            Plan. Organize. Excel. &bull; A Well-Planned Campus
           </p>
         </div>
       </section>
@@ -205,12 +207,12 @@ export default function DashboardModule({ onNavigateTab, isDark = false }: Dashb
             <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-full bg-[#FFE3C4] dark:bg-[#4A3320] flex items-center justify-center shrink-0">
               <Star className="w-6 h-6 text-amber-500 fill-amber-500" strokeWidth={1.6} />
             </div>
-            <div>
-              <div className="text-[14px] sm:text-[15px] font-bold leading-tight">Spectra Week</div>
-              <div className="mt-1 text-[24px] sm:text-[30px] leading-none font-heading font-extrabold tracking-tight whitespace-nowrap">
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] sm:text-[14px] font-bold leading-tight text-[var(--muted)]">Spectra Week</div>
+              <div className="mt-1 text-[18px] sm:text-[20px] xl:text-[22px] leading-tight font-heading font-extrabold tracking-tight text-[var(--ink)]">
                 Event Calendar
               </div>
-              <div className="text-xs sm:mt-1.5 text-[var(--ink)]/80 font-semibold sm:font-medium">
+              <div className="text-[11.5px] sm:mt-1 text-[var(--ink)]/80 font-semibold truncate">
                 P10–P13 Evening Windows
               </div>
             </div>

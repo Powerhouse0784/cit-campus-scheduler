@@ -263,18 +263,38 @@ function VenueArt({ type }: { type: string }) {
   );
 }
 
+const VENUE_REAL_PHOTOS: Record<string, string> = {
+  AUD: "https://images.unsplash.com/photo-1580582932707-520aed937b7b?auto=format&fit=crop&w=800&q=80", // Bright modern classroom with desks & whiteboard
+  "SH-1": "https://images.unsplash.com/photo-1517457373958-b7bdd4587205?auto=format&fit=crop&w=800&q=80", // Modern seminar hall
+  "CS-LAB-1": "https://images.unsplash.com/photo-1562774053-701939374585?auto=format&fit=crop&w=800&q=80", // Computer science lab
+  "LH-1": "https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&w=800&q=80", // Lecture hall
+  OAT: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=800&q=80", // Outdoor amphitheater stage
+};
+
 function VenuePhoto({ id, type }: { id: string; type: string }) {
-  const [hasPhoto, setHasPhoto] = useState(true);
+  const [imgSrc, setImgSrc] = useState<string>(`/images/venues/${id}.jpg`);
+  const [failed, setFailed] = useState(false);
+
   return (
-    <div className="relative w-full h-full">
-      <VenueArt type={type} />
-      {hasPhoto && (
+    <div className="relative w-full h-full overflow-hidden bg-slate-900">
+      {/* 1. If local or CDN photo fails, render realistic vector artwork */}
+      {failed && <VenueArt type={type} />}
+
+      {/* 2. Photo element with auto-fallback to curated real venue image */}
+      {!failed && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={`/images/venues/${id}.jpg`}
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover"
-          onError={() => setHasPhoto(false)}
+          src={imgSrc}
+          alt={id}
+          className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+          onError={() => {
+            // If local /images/venues/${id}.jpg is not present, fall back to high-res real photo
+            if (VENUE_REAL_PHOTOS[id] && imgSrc !== VENUE_REAL_PHOTOS[id]) {
+              setImgSrc(VENUE_REAL_PHOTOS[id]);
+            } else {
+              setFailed(true);
+            }
+          }}
         />
       )}
     </div>

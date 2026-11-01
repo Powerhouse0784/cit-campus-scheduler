@@ -14,16 +14,15 @@ import {
   UserRound,
   Zap,
   ArrowRight,
+  Clock,
   Star,
   HelpCircle,
   Printer,
   FileDown,
-  Download,
   AlertTriangle,
   CheckCircle2,
   Info,
   Sparkles,
-  Clock
 } from "lucide-react";
 import HeroBanner from "@/components/HeroBanner";
 import CountUp from "@/components/ui/CountUp";
@@ -40,7 +39,6 @@ const DAYS = ["MON", "TUE", "WED", "THU", "FRI"];
 const DAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri"];
 const DAY_LONG = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
-/** P1-P5 before lunch, P6-P9 after (lunch is 13:00-14:00). */
 const PERIODS = [
   { p: 1, start: "08:00", end: "09:00" },
   { p: 2, start: "09:00", end: "10:00" },
@@ -54,11 +52,10 @@ const PERIODS = [
 ];
 
 const TONES: Tone[] = ["blue", "violet", "green", "amber", "rose", "cyan"];
-const LUNCH_ROW = 7; // grid row of the lunch strip
+const LUNCH_ROW = 7;
 
 const DEFAULT_ENTITY: Record<Dimension, string> = { group: "CSE-2", faculty: "F01", room: "LH-1" };
 
-/** Same course -> same colour, everywhere. */
 function toneFor(courseId: string): Tone {
   let h = 0;
   for (let i = 0; i < courseId.length; i++) h = (h * 31 + courseId.charCodeAt(i)) >>> 0;
@@ -188,7 +185,7 @@ function WeekPicker({
 }
 
 /* ------------------------------------------------------------------ */
-/* Course Chip with Interactive Hover Popover & Red Shake Conflict    */
+/* Course Chip with Smart Auto-Flipping Hover Popover                 */
 /* ------------------------------------------------------------------ */
 function CourseChip({
   s,
@@ -201,6 +198,8 @@ function CourseChip({
   onExplainSlot,
   live = false,
   isConflict = false,
+  startPeriod = 1,
+  dayIndex = 0,
 }: {
   s: any;
   extra: number;
@@ -212,9 +211,10 @@ function CourseChip({
   onExplainSlot?: () => void;
   live?: boolean;
   isConflict?: boolean;
+  startPeriod?: number;
+  dayIndex?: number;
 }) {
   const [showPopover, setShowPopover] = useState(false);
-  const popoverRef = useRef<HTMLDivElement>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const tone = toneFor(s.course_id);
@@ -232,6 +232,15 @@ function CourseChip({
 
   const hasClash = isConflict || extra > 0;
 
+  // SMART AUTO-FLIP: Top rows (P1, P2, P3) flip downward so they never get cut off at top!
+  const isTopRow = (startPeriod ?? s.start_period ?? 1) <= 3;
+  const isFirstCol = dayIndex === 0;
+  const isLastCol = dayIndex === 4;
+
+  const popoverPosition = `${isTopRow ? "top-full mt-2" : "bottom-full mb-2"} ${
+    isFirstCol ? "left-0 translate-x-0" : isLastCol ? "right-0 left-auto translate-x-0" : "left-1/2 -translate-x-1/2"
+  }`;
+
   return (
     <div
       className="relative w-full h-full"
@@ -241,13 +250,7 @@ function CourseChip({
       <div
         tabIndex={0}
         aria-label={`${s.course_title}, ${s.course_id}, ${s.room_name || s.room_id}, ${s.faculty_name}, ${ariaWhen}`}
-        style={
-          hasClash
-            ? {
-                animation: "cellShake 0.6s ease-in-out infinite",
-              }
-            : undefined
-        }
+        style={hasClash ? { animation: "cellShake 0.6s ease-in-out infinite" } : undefined}
         className={`chip ${
           hasClash
             ? "bg-rose-100 dark:bg-rose-950/80 border-rose-500 text-rose-950 dark:text-rose-100 ring-2 ring-rose-500 shadow-md"
@@ -301,14 +304,13 @@ function CourseChip({
         </div>
       </div>
 
-      {/* Floating Rich Hover Detail Popover */}
+      {/* Floating Popover: Auto-flips Downward on Top Rows (P1-P3) and Upward on Lower Rows */}
       {showPopover && (
         <div
-          ref={popoverRef}
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
-          className="absolute z-50 left-1/2 -translate-x-1/2 bottom-full mb-2 w-72 p-3.5 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-2xl space-y-2.5 text-xs text-[var(--ink)] animate-in fade-in zoom-in-95 pointer-events-auto"
-          style={{ boxShadow: "0 18px 48px rgba(15,35,85,0.28)" }}
+          className={`absolute z-[80] ${popoverPosition} w-72 p-3.5 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-2xl space-y-2.5 text-xs text-[var(--ink)] animate-in fade-in zoom-in-95 pointer-events-auto`}
+          style={{ boxShadow: "0 20px 50px rgba(15,35,85,0.30)" }}
         >
           {/* Header */}
           <div className="flex items-start justify-between border-b pb-2" style={{ borderColor: "var(--border)" }}>
@@ -590,7 +592,7 @@ export default function TimetableSection({ isDark = false, searchQuery = "", onN
   const [highlight, setHighlight] = useState<string | null>(null);
   const [explainQuery, setExplainQuery] = useState<{ type: "booking_rejected" | "why_slot"; id: string } | null>(null);
 
-  // Simulated Clash Testing Toggle (Allows judges to test red shake animation)
+  // Toggle for testing conflict animation
   const [simulateClashTest, setSimulateClashTest] = useState(false);
 
   const entity = entities[dimension];
@@ -1037,7 +1039,7 @@ export default function TimetableSection({ isDark = false, searchQuery = "", onN
                       ))
                     )}
 
-                    {/* Sessions with Popover & Shake on Clash */}
+                    {/* Sessions with Smart Auto-Flipping Popover */}
                     {placed.map((x) => {
                       const startRow = rowOf(x.startPeriod);
                       const endRow = rowOf(x.startPeriod + x.span - 1);
@@ -1045,7 +1047,6 @@ export default function TimetableSection({ isDark = false, searchQuery = "", onN
                       const sp = PERIODS[x.startPeriod - 1];
                       const ep = PERIODS[x.startPeriod + x.span - 2] || sp;
 
-                      // Trigger simulated clash on Friday P1 if test is active
                       const simulatedConflict = simulateClashTest && x.dayIndex === 4 && x.startPeriod <= 2;
 
                       return (
@@ -1070,6 +1071,8 @@ export default function TimetableSection({ isDark = false, searchQuery = "", onN
                             onExplainSlot={() => setExplainQuery({ type: "why_slot", id: x.session.session_id })}
                             live={isLiveSlot(x.dayIndex, x.startPeriod, x.span)}
                             isConflict={simulatedConflict}
+                            startPeriod={x.startPeriod}
+                            dayIndex={x.dayIndex}
                           />
                         </div>
                       );
@@ -1139,6 +1142,8 @@ export default function TimetableSection({ isDark = false, searchQuery = "", onN
                             ariaWhen={`${DAY_LONG[x.dayIndex]} ${sp.start} to ${ep.end}`}
                             compact
                             live={isLiveSlot(x.dayIndex, x.startPeriod, x.span)}
+                            startPeriod={x.startPeriod}
+                            dayIndex={mobileDay}
                           />
                         </div>
                       );
