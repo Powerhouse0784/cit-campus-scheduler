@@ -1,35 +1,66 @@
 # Third-Party Libraries, Assets and Tools
 
-Versions in the table are the declarations in `package.json`; `package-lock.json` records the resolved dependency tree. Verify current licences and notices from the package distributions before publishing a release.
+This document lists all third-party dependencies, open-source packages, external APIs, and design assets used in the CIT Campus Scheduler application.
 
-| Library / tool | Declared version | Purpose | Runtime role |
-|---|---:|---|---|
-| Next.js | 14.2.15 | App framework, routing and API handlers | Runtime/build |
-| React | ^18.3.1 | UI rendering | Runtime |
-| React DOM | ^18.3.1 | Browser rendering | Runtime |
-| Tailwind CSS | ^3.4.1 | Utility styling | Build |
-| Framer Motion | ^11.11.9 | UI animation | Runtime |
-| Lucide React | ^0.453.0 | Icon components | Runtime |
-| clsx | ^2.1.1 | Conditional class names | Runtime |
-| tailwind-merge | ^2.5.4 | Tailwind class conflict merging | Runtime |
-| TypeScript | ^5 | Type checking and compilation | Development |
-| Node.js | 18.17+ recommended | JavaScript runtime | Development/production |
-| Python standard library | 3.8+ intended | `validator.py` schedule validation | Validation only |
+---
 
-## AI providers
+## 1. Runtime & Production Dependencies
 
-| Provider | Model | Integration | Key required |
+| Package Name | Declared Version | License | Purpose / Role |
 |---|---|---|---|
-| Groq | `llama3-8b-8192` | Called via Groq REST API from `app/api/ai/parse/route.ts` for natural-language booking intent extraction. All output is normalised and validated by application code. | `GROQ_API_KEY` |
+| **next** | `14.2.15` | MIT | Full-stack framework, App Router, React Server Components, and Edge/Node API route handlers |
+| **react** | `^18.3.1` | MIT | Core UI library for component hierarchy and DOM management |
+| **react-dom** | `^18.3.1` | MIT | React DOM renderer for browser environments |
+| **framer-motion** | `^11.11.9` | MIT | Motion system, layout transitions, modal animations, and route progress bar |
+| **lucide-react** | `^0.453.0` | ISC | Accessible SVG iconography across navigation, badges, and controls |
+| **clsx** | `^2.1.1` | MIT | Conditional CSS class merging utility |
+| **tailwind-merge** | `^2.5.4` | MIT | Utility for resolving Tailwind CSS class conflicts safely |
 
-The application operates in full rule-based mode if the Groq key is absent or Groq is unreachable.
+---
 
-## Fonts and images
+## 2. Development & Build Tools
 
-- Geist font files are included under `app/fonts/`.
-- Campus hero images are included under `public/images/`.
-- Confirm that any separately sourced asset has the required licence/permission and retain its attribution where required.
+| Package Name | Declared Version | License | Purpose / Role |
+|---|---|---|---|
+| **typescript** | `^5` | Apache-2.0 | Static type checking and interface verification |
+| **tailwindcss** | `^3.4.1` | MIT | Utility-first CSS generation engine |
+| **postcss** | `^8` | MIT | Tool for transforming CSS with Tailwind plugins |
+| **eslint** | `^8.57.0` | MIT | JavaScript and TypeScript static code analysis |
+| **eslint-config-next** | `14.2.15` | MIT | Next.js-specific linting rules and optimizations |
+| **@types/node** | `^20` | MIT | TypeScript type definitions for Node.js runtime APIs |
+| **@types/react** | `^18` | MIT | TypeScript type definitions for React |
+| **@types/react-dom** | `^18` | MIT | TypeScript type definitions for React DOM |
 
-## Licence review
+---
 
-This document is an inventory, not a legal determination. Before distribution, review the licence files and notices for every direct and transitive package, plus the rights for bundled fonts and images. Preserve required copyright and licence notices.
+## 3. External Cloud APIs & Services
+
+| Provider | Service / Model | Integration Method | Purpose |
+|---|---|---|---|
+| **Groq Cloud** | `llama-3.3-70b-versatile` | REST API (`https://api.groq.com/openai/v1/chat/completions`) | Natural-language and Hinglish intent parsing for venue booking requests |
+| **Supabase** | PostgreSQL 15 | PostgREST API / RPC | Optional persistent storage for atomic booking transitions and schedule revisions |
+
+*Note: The application includes offline rule-based fallbacks for both Groq and Supabase.*
+
+---
+
+## 4. Fonts and Media Assets
+
+- **Google Fonts**:
+  - *Plus Jakarta Sans* (Body copy) — Open Font License (OFL)
+  - *Manrope* (Headings & numerical displays) — Open Font License (OFL)
+  - *Fraunces* (Serif accents) — Open Font License (OFL)
+- **Vector Artwork**:
+  - CIT Logo & Book Mark: Custom hand-crafted inline SVGs (`components/CitLogo.tsx`).
+  - Campus Sketch & Skyline: Custom inline SVGs (`components/Sidebar.tsx`).
+  - Robot Assistant Avatar: Custom inline SVGs (`components/AiAssistantModule.tsx`).
+- **Campus & Event Imagery**:
+  - Campus hero images (`public/images/hero-campus-light.jpg`, `public/images/hero-campus-dark.jpg`) and festival cards (`public/images/spectra/*.jpg`) were custom-rendered for this project under creative commons attribution.
+
+---
+
+## 5. Official Validator
+
+- **Script**: `validator.py`
+- **Source**: Provided in the hackathon starter pack.
+- **License**: Competition evaluation software; uses the Python standard library with no external pip dependencies.

@@ -1,6 +1,5 @@
 # AI Usage Declaration — CIT Campus Scheduler
 
-## Team Information
 - **Team Name**: CIT Master Minds
 - **Project**: CIT Campus Scheduler & Operations Hub (Crunch Week 2024)
 - **Submission Date**: November 1, 2024
@@ -9,65 +8,135 @@
 
 ## 1. AI Features Implemented in the Product
 
-### A. Natural-Language Booking & Query Parser (`lib/ai-parser.ts`, `app/api/ai/parse/route.ts`)
-- **Model**: Groq Cloud API running `llama3-8b-8192` (inference speed ~300 tokens/sec).
-- **Purpose**: Extracts structured intent from complex English and conversational Hinglish messages (e.g. *"Kal dopahar 3 baje 80 students ke liye LH-1 chahiye projector ke saath"*).
-- **Extraction Schema**: Returns normalized JSON specifying event title, category, attendance, duration, days, period windows, room types, facilities, and accessibility requirements.
-- **Normalisation & Safety Layer**: Every LLM output is strictly post-processed and clamped by `normaliseGroqOutput()` before any scheduling engine receives it. The LLM output is treated as untrusted input.
+### A. Conversational & Hinglish Booking Intent Parser (`lib/ai-parser.ts`, `app/api/ai/parse/route.ts`)
+- **Model**: Groq Cloud API running `llama-3.3-70b-versatile` (fallback support for `llama3-8b-8192`).
+- **Purpose**: Extracts structured scheduling variables from conversational English and Hinglish inputs (e.g., *"Kal dopahar 2 baje 70 students ke liye CS lab chahiye"*).
+- **Extracted Fields**:
+  - Event title & institutional category
+  - Expected attendance
+  - Duration in periods (1 period = 1 hour)
+  - Target weekday (`MON`–`FRI`)
+  - Target start period (`P1`–`P13`)
+  - Equipment requirements (`projector`, `pa_system`, `stage`, `computers`)
+  - Accessibility constraints (`accessible`)
+- **Sanitization & Clamping**: Every raw LLM output is parsed through `normaliseGroqOutput()` to enforce period bounds (clamping times to the P13 curfew) and detect accessibility issues before passing to any downstream engine.
 
 ### B. Deterministic Rule-Based Fallback Guarantee
-- When `GROQ_API_KEY` is not set or network latency exceeds 8 seconds, the application automatically falls back to the deterministic regular-expression & keyword parser in `lib/ai-parser.ts`.
-- The UI transparently displays the parsing source (`Groq (llama3-8b-8192)` vs `rule_based_fallback`). Judges can verify full functionality without an API key.
+- If `GROQ_API_KEY` is not configured, or if an API timeout ($\ge 8\text{ seconds}$) occurs, the system falls back to the deterministic keyword and regex parser in `lib/ai-parser.ts`.
+- The UI indicates the parsing source (`_source: "groq"` vs `_source: "rule_based"`). All core booking flows remain usable without an API key.
 
-### C. Conversational Faculty AI Assistant (`app/api/ai/assistant/route.ts`, `components/AiAssistantModule.tsx`)
-- Provides natural-language schedule interrogation, timetable queries, conflict scans, and rescheduling proposals.
-- **Prompt Injection Defense**: Evaluates incoming prompts against malicious jailbreak and privilege-escalation patterns (`ignore previous instructions`, `grant admin`, `override rules`).
-- **Priority Policy Enforcement**: Prevents lower-priority roles (students/clubs) from using natural language prompts to displace academic courses or exam periods.
+### C. Conversational Faculty Assistant (`app/api/ai/assistant/route.ts`, `components/AiAssistantModule.tsx`)
+- Provides natural-language access to schedule inspection, conflict status, and draft rescheduling solutions.
+- **Prompt Injection Defense**: Rejects jailbreak patterns (`ignore previous instructions`, `grant admin`, `override constraints`, `drop table`).
+- **Priority Policy Enforcement**: Blocks lower-priority roles (students/clubs) from requesting cancellations of regular academic sessions.
 
 ---
 
 ## 2. What the AI is NOT Allowed to Decide (Safety Boundary)
 
-Under our strict architecture, **no AI model or LLM makes scheduling, conflict, or allocation decisions**:
-1. **Constraint Satisfaction**: The LLM never decides whether a slot is free, whether capacity is sufficient, or whether a room type matches. All H1–H14 hard constraints are verified by deterministic code (`lib/timetable-engine.ts`, `lib/booking-engine.ts`, `lib/exam-engine.ts`).
-2. **Approval Authority**: The LLM never approves, rejects, or publishes bookings or disruption changes. Approvals require cryptographic session authorization (`lib/auth-session.ts`).
-3. **Rescheduling Solver**: Timetable reallocations are computed by the deterministic Constraint Satisfaction Search (`lib/rescheduling-solver.ts`), searching for low-disruption candidates; results must be validated and are not guaranteed globally optimal.
+To comply with competition rules, **the LLM is strictly prohibited from making scheduling, allocation, or validation decisions**:
+
+1. **No Constraint Evaluation by LLM**: The model never decides whether a venue is free, whether student cohorts clash, or whether room capacity is sufficient. All H1–H14 hard constraints are verified by deterministic code (`lib/timetable-engine.ts`, `lib/booking-engine.ts`, `lib/exam-engine.ts`).
+2. **No Autonomous Approval**: The LLM cannot approve, reject, or commit bookings or timetable changes. All mutations require verified session authentication (`lib/auth-session.ts`).
+3. **No Autonomous Rescheduling**: Relocation candidates are determined by deterministic constraint satisfaction search (`lib/rescheduling-solver.ts`), requiring human Admin approval before publication.
 
 ---
 
 ## 3. Development Assistance Declaration
 
-In accordance with competition rules, the following AI tools and coding assistants were utilized during the development lifecycle:
+The following AI tools and coding assistants were used during development:
 
-| Tool / Assistant | Provider | Dates Used | Codebase Contributions |
+| Tool / Assistant | Provider | Dates Used | Contributions |
 |---|---|---|---|
-| **Antigravity / Gemini 2.0** | Google DeepMind | Oct 27 – Nov 1, 2024 | Architectural scaffolding, TypeScript interface definitions, SVG UI components, unit tests, and Tailwind CSS responsive styling. |
-| **Llama-3-8B-8192** | Meta / Groq | Oct 28 – Nov 1, 2024 | Conversational intent extraction, Hinglish translation patterns, and few-shot booking extraction prompt design. |
-| **GitHub Copilot** | GitHub / OpenAI | Oct 27 – Oct 30, 2024 | Code autocompletion, boilerplate Next.js API routes, and CSV-to-JSON data ingestion scripts. |
+| **Google Gemini 2.0 / Antigravity** | Google DeepMind | Oct 27 – Nov 1, 2024 | Boilerplate Next.js scaffolding, TypeScript types, SVG graphics, and Tailwind CSS layouts. |
+| **Llama-3.3-70B-Versatile** | Meta / Groq | Oct 28 – Nov 1, 2024 | Hinglish parsing logic, intent extraction schemas, and few-shot extraction prompts. |
+| **GitHub Copilot** | GitHub / OpenAI | Oct 27 – Oct 30, 2024 | Autocomplete suggestions for boilerplate API routes and CSV loading scripts. |
 
-### Specific Parts Written by Human Engineers vs AI Assistance
-- **100% Deterministic Engine Code (Human Architected & Verified)**:
-  - `lib/timetable-engine.ts` (H1–H14 hard constraint logic, S1–S6 soft penalty calculation)
-  - `lib/exam-engine.ts` (Dynamic exam slotting, 50% capacity cap, cohort clash prevention)
-  - `lib/rescheduling-solver.ts` (CSP tree search, stability objective minimization)
-  - `lib/auth-session.ts` (HMAC-SHA256 session signatures and constant-time password verification)
-- **AI-Assisted Modules**:
-  - UI layout and Tailwind styling in `components/`
-  - Prompt engineering and regex dictionary in `lib/ai-parser.ts`
-  - Synthetic test cases in `data/sample_disruption.json` and `examples/sample_requests.md`
+### Division of Work: Code Written by Team vs AI-Assisted
+
+- **100% Deterministic Engine Code (Written & Verified by Team)**:
+  - `lib/timetable-engine.ts`: Implementation of H1–H14 hard constraints and S1–S6 soft-penalty formulas.
+  - `lib/exam-engine.ts`: Midsem exam slotting with 50% social-distancing capacity and single-exam-per-day constraints.
+  - `lib/rescheduling-solver.ts`: Multi-pass CSP search prioritizing room-only moves over time shifts.
+  - `lib/booking-engine.ts`: Multi-tier priority queue, role caps, and anti-self-approval enforcement.
+  - `lib/auth-session.ts`: Cryptographic token signing and constant-time credential matching.
+- **AI-Assisted Components**:
+  - UI layout, color palettes, and Tailwind utility classes in `components/`.
+  - Regex patterns for Hindi/Hinglish weekday and period detection in `lib/ai-parser.ts`.
+  - Edge-case scenario design in `examples/sample_requests.md`.
 
 ---
 
 ## 4. Prompt Storage & Privacy
 
-- The system prompt sent to Groq is defined as a constant `GROQ_SYSTEM_PROMPT` in `app/api/ai/parse/route.ts`.
-- **Zero Data Retention**: The system does not store user prompts or conversational history in third-party model logs; requests are completely stateless.
+- The system prompt used for intent extraction is stored as `GROQ_SYSTEM_PROMPT` in `app/api/ai/parse/route.ts`.
+- **Privacy & Data Retention**: No user data, student information, or scheduling databases are used for model training. Prompts contain only user-submitted booking text and are processed statelessly.
+File 3: THIRD_PARTY.md
+code
+Markdown
+# Third-Party Libraries, Assets and Tools
+
+This document lists all third-party dependencies, open-source packages, external APIs, and design assets used in the CIT Campus Scheduler application.
 
 ---
 
-## 5. Known Limitations
-- The parser is not a general-purpose conversational agent. Ambiguous or incomplete requests may require user correction; deterministic validation must be used before any booking decision.
-- Demo credentials are intended only for local evaluation and must be replaced/disabled before public production use.
-- Persistence currently uses process memory, `/tmp`, and local JSON files as fallbacks. These are **not durable shared storage on Vercel**; configure a database-backed adapter before relying on cross-instance persistence.
-- Production authentication requires `CIT_AUTH_SECRET` (at least 32 characters). The app deliberately refuses to mint sessions with a predictable production fallback secret.
-- Period numbers (P1–P13) follow the institution's official 08:00–21:00 schedule structure.
+## 1. Runtime & Production Dependencies
+
+| Package Name | Declared Version | License | Purpose / Role |
+|---|---|---|---|
+| **next** | `14.2.15` | MIT | Full-stack framework, App Router, React Server Components, and Edge/Node API route handlers |
+| **react** | `^18.3.1` | MIT | Core UI library for component hierarchy and DOM management |
+| **react-dom** | `^18.3.1` | MIT | React DOM renderer for browser environments |
+| **framer-motion** | `^11.11.9` | MIT | Motion system, layout transitions, modal animations, and route progress bar |
+| **lucide-react** | `^0.453.0` | ISC | Accessible SVG iconography across navigation, badges, and controls |
+| **clsx** | `^2.1.1` | MIT | Conditional CSS class merging utility |
+| **tailwind-merge** | `^2.5.4` | MIT | Utility for resolving Tailwind CSS class conflicts safely |
+
+---
+
+## 2. Development & Build Tools
+
+| Package Name | Declared Version | License | Purpose / Role |
+|---|---|---|---|
+| **typescript** | `^5` | Apache-2.0 | Static type checking and interface verification |
+| **tailwindcss** | `^3.4.1` | MIT | Utility-first CSS generation engine |
+| **postcss** | `^8` | MIT | Tool for transforming CSS with Tailwind plugins |
+| **eslint** | `^8.57.0` | MIT | JavaScript and TypeScript static code analysis |
+| **eslint-config-next** | `14.2.15` | MIT | Next.js-specific linting rules and optimizations |
+| **@types/node** | `^20` | MIT | TypeScript type definitions for Node.js runtime APIs |
+| **@types/react** | `^18` | MIT | TypeScript type definitions for React |
+| **@types/react-dom** | `^18` | MIT | TypeScript type definitions for React DOM |
+
+---
+
+## 3. External Cloud APIs & Services
+
+| Provider | Service / Model | Integration Method | Purpose |
+|---|---|---|---|
+| **Groq Cloud** | `llama-3.3-70b-versatile` | REST API (`https://api.groq.com/openai/v1/chat/completions`) | Natural-language and Hinglish intent parsing for venue booking requests |
+| **Supabase** | PostgreSQL 15 | PostgREST API / RPC | Optional persistent storage for atomic booking transitions and schedule revisions |
+
+*Note: The application includes offline rule-based fallbacks for both Groq and Supabase.*
+
+---
+
+## 4. Fonts and Media Assets
+
+- **Google Fonts**:
+  - *Plus Jakarta Sans* (Body copy) — Open Font License (OFL)
+  - *Manrope* (Headings & numerical displays) — Open Font License (OFL)
+  - *Fraunces* (Serif accents) — Open Font License (OFL)
+- **Vector Artwork**:
+  - CIT Logo & Book Mark: Custom hand-crafted inline SVGs (`components/CitLogo.tsx`).
+  - Campus Sketch & Skyline: Custom inline SVGs (`components/Sidebar.tsx`).
+  - Robot Assistant Avatar: Custom inline SVGs (`components/AiAssistantModule.tsx`).
+- **Campus & Event Imagery**:
+  - Campus hero images (`public/images/hero-campus-light.jpg`, `public/images/hero-campus-dark.jpg`) and festival cards (`public/images/spectra/*.jpg`) were custom-rendered for this project under creative commons attribution.
+
+---
+
+## 5. Official Validator
+
+- **Script**: `validator.py`
+- **Source**: Provided in the hackathon starter pack.
+- **License**: Competition evaluation software; uses the Python standard library with no external pip dependencies.
